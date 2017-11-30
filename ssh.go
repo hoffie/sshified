@@ -57,7 +57,7 @@ type sshTransport struct {
 }
 
 func NewSSHTransport(user, keyFile, knownHostsFile string, port int) (*sshTransport, error) {
-	sc := &sshTransport{
+	t := &sshTransport{
 		port:            port,
 		clientCache:     make(map[string]*ssh.Client),
 		clientCacheLock: &sync.RWMutex{},
@@ -65,22 +65,22 @@ func NewSSHTransport(user, keyFile, knownHostsFile string, port int) (*sshTransp
 		knownHostsFile:  knownHostsFile,
 		user:            user,
 	}
-	sc.LoadFiles()
-	sc.createTransport()
-	return sc, nil
+	t.LoadFiles()
+	t.createTransport()
+	return t, nil
 }
 
-func (sc *sshTransport) LoadFiles() error {
-	auth, err := makePubkeyAuth(sc.keyFile)
+func (t *sshTransport) LoadFiles() error {
+	auth, err := makePubkeyAuth(t.keyFile)
 	if err != nil {
 		return fmt.Errorf("failed to load private key file: %s", err)
 	}
-	knownHosts, err := knownhosts.New(sc.knownHostsFile)
+	knownHosts, err := knownhosts.New(t.knownHostsFile)
 	if err != nil {
 		return fmt.Errorf("failed to load known hosts: %s", err)
 	}
-	sc.clientConfig = &ssh.ClientConfig{
-		User:            sc.user,
+	t.clientConfig = &ssh.ClientConfig{
+		User:            t.user,
 		Auth:            auth,
 		HostKeyCallback: knownHosts,
 		Timeout:         5 * time.Second,
@@ -88,10 +88,10 @@ func (sc *sshTransport) LoadFiles() error {
 	return nil
 }
 
-func (sc *sshTransport) createTransport() {
-	sc.Transport = &http.Transport{
+func (t *sshTransport) createTransport() {
+	t.Transport = &http.Transport{
 		Proxy: nil,
-		Dial:  sc.dial,
+		Dial:  t.dial,
 		// FIXME: DialContext
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
@@ -99,12 +99,12 @@ func (sc *sshTransport) createTransport() {
 	}
 }
 
-func (sc *sshTransport) checkHostKey(hostname string, remote net.Addr, key ssh.PublicKey) error {
+func (t *sshTransport) checkHostKey(hostname string, remote net.Addr, key ssh.PublicKey) error {
 	log.WithFields(log.Fields{"hostname": hostname, "remote": remote, "key": key}).Warn("blindly accepting host key")
 	return nil
 }
 
-func (sc *sshTransport) dial(network, addr string) (net.Conn, error) {
+func (t *sshTransport) dial(network, addr string) (net.Conn, error) {
 	if network != "tcp" {
 		log.WithFields(log.Fields{"network": network, "addr": addr}).Error("network type not supported")
 		return nil, fmt.Errorf("network type %s is not supported", network)
@@ -115,7 +115,7 @@ func (sc *sshTransport) dial(network, addr string) (net.Conn, error) {
 	}
 	retry := true
 	for retry {
-		client, err := sc.getSSHClient(targetHost)
+		client, err := t.getSSHClient(targetHost)
 		if err != nil {
 			return nil, fmt.Errorf("failed to obtain ssh connection: %s", err)
 		}
@@ -126,7 +126,7 @@ func (sc *sshTransport) dial(network, addr string) (net.Conn, error) {
 			// connection failed? may be caused by lost ssh transport
 			// connection; let's assume it is dead and try again once with a fresh one.
 			log.WithFields(log.Fields{"host": targetHost, "err": err}).Warn("connection failed, retrying with new connection")
-			sc.invalidateClientCacheFor(targetHost)
+			t.invalidateClientCacheFor(targetHost)
 			retry = false
 			continue
 		}
@@ -135,28 +135,28 @@ func (sc *sshTransport) dial(network, addr string) (net.Conn, error) {
 	return nil, err
 }
 
-func (sc *sshTransport) invalidateClientCacheFor(host string) {
-	sc.clientCacheLock.Lock()
-	delete(sc.clientCache, host)
-	sc.clientCacheLock.Unlock()
+func (t *sshTransport) invalidateClientCacheFor(host string) {
+	t.clientCacheLock.Lock()
+	delete(t.clientCache, host)
+	t.clientCacheLock.Unlock()
 }
 
-func (sc *sshTransport) getSSHClient(host string) (*ssh.Client, error) {
+func (t *sshTransport) getSSHClient(host string) (*ssh.Client, error) {
 	log.Debug("acquiring cache lock")
-	sc.clientCacheLock.RLock()
-	client, cached := sc.clientCache[host]
-	sc.clientCacheLock.RUnlock()
+	t.clientCacheLock.RLock()
+	client, cached := t.clientCache[host]
+	t.clientCacheLock.RUnlock()
 	if cached {
 		log.WithFields(log.Fields{"host": host}).Debug("using cached ssh connection")
 		return client, nil
 	}
 	log.WithFields(log.Fields{"host": host}).Debug("building ssh connection")
-	sshAddr := fmt.Sprintf("%s:%d", host, sc.port)
-	client, err := ssh.Dial("tcp", sshAddr, sc.clientConfig)
+	sshAddr := fmt.Sprintf("%s:%d", host, t.port)
+	client, err := ssh.Dial("tcp", sshAddr, t.clientConfig)
 	if err == nil {
 		log.WithFields(log.Fields{"host": host}).Debug("caching successful ssh connection")
-		sc.clientCacheLock.Lock()
-		cachedClient, cached := sc.clientCache[host]
+		t.clientCacheLock.Lock()
+		cachedClient, cached := t.clientCache[host]
 		if cached {
 			// we already checked above and did not have a cached client.
 			// however, due to concurrent requests, we may now have one.
@@ -166,9 +166,9 @@ func (sc *sshTransport) getSSHClient(host string) (*ssh.Client, error) {
 			client.Close()
 			client = cachedClient
 		} else {
-			sc.clientCache[host] = client
+			t.clientCache[host] = client
 		}
-		sc.clientCacheLock.Unlock()
+		t.clientCacheLock.Unlock()
 	}
 	return client, err
 }
