@@ -2,6 +2,9 @@ package main
 
 import (
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -37,6 +40,19 @@ func main() {
 		WriteTimeout:   10 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
-	log.Fatal(s.ListenAndServe())
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGHUP)
 
+	go func() {
+		for _ = range c {
+			log.Info("got SIGHUP, reloading known hosts and key file")
+			err := sshTransport.LoadFiles()
+			if err == nil {
+				log.Info("successfully reloaded")
+			} else {
+				log.WithFields(log.Fields{"err": err}).Error("reload failed")
+			}
+		}
+	}()
+	log.Fatal(s.ListenAndServe())
 }

@@ -46,35 +46,46 @@ func makePubkeyAuth(keyFile string) ([]ssh.AuthMethod, error) {
 }
 
 type sshTransport struct {
-	Port            int
+	port            int
+	user            string
 	clientConfig    *ssh.ClientConfig
 	clientCache     map[string]*ssh.Client
 	clientCacheLock *sync.RWMutex
 	Transport       http.RoundTripper
+	keyFile         string
+	knownHostsFile  string
 }
 
 func NewSSHTransport(user, keyFile, knownHostsFile string, port int) (*sshTransport, error) {
 	sc := &sshTransport{
-		Port:            port,
+		port:            port,
 		clientCache:     make(map[string]*ssh.Client),
 		clientCacheLock: &sync.RWMutex{},
+		keyFile:         keyFile,
+		knownHostsFile:  knownHostsFile,
+		user:            user,
 	}
-	auth, err := makePubkeyAuth(keyFile)
+	sc.LoadFiles()
+	sc.createTransport()
+	return sc, nil
+}
+
+func (sc *sshTransport) LoadFiles() error {
+	auth, err := makePubkeyAuth(sc.keyFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load private key file: %s", err)
+		return fmt.Errorf("failed to load private key file: %s", err)
 	}
-	knownHosts, err := knownhosts.New(knownHostsFile)
+	knownHosts, err := knownhosts.New(sc.knownHostsFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load known hosts: %s", err)
+		return fmt.Errorf("failed to load known hosts: %s", err)
 	}
 	sc.clientConfig = &ssh.ClientConfig{
-		User:            user,
+		User:            sc.user,
 		Auth:            auth,
 		HostKeyCallback: knownHosts,
 		Timeout:         5 * time.Second,
 	}
-	sc.createTransport()
-	return sc, nil
+	return nil
 }
 
 func (sc *sshTransport) createTransport() {
@@ -140,7 +151,7 @@ func (sc *sshTransport) getSSHClient(host string) (*ssh.Client, error) {
 		return client, nil
 	}
 	log.WithFields(log.Fields{"host": host}).Debug("building ssh connection")
-	sshAddr := fmt.Sprintf("%s:%d", host, sc.Port)
+	sshAddr := fmt.Sprintf("%s:%d", host, sc.port)
 	client, err := ssh.Dial("tcp", sshAddr, sc.clientConfig)
 	if err == nil {
 		log.WithFields(log.Fields{"host": host}).Debug("caching successful ssh connection")
