@@ -10,9 +10,10 @@ $ mkdir conf/
 ```
 $ sudo useradd sshified-test -s /bin/false -m
 $ ssh-keygen -f conf/id_rsa
-$ sudo tee /home/sshified-test/.ssh/authorized_keys < conf/id_rsa.pub
-$ sudo chmod 700 home/sshified-test/.ssh/
-$ sudo chmod 600 /home/sshified-test/.ssh/authorized_keys
+$ sudo -u sshified-test mkdir /home/sshified-test/.ssh/
+$ sudo -u sshified-test tee /home/sshified-test/.ssh/authorized_keys < conf/id_rsa.pub
+$ sudo -u sshified-test chmod 700 /home/sshified-test/.ssh/
+$ sudo -u sshified-test chmod 600 /home/sshified-test/.ssh/authorized_keys
 ```
 
 ## Populating known hosts file
@@ -23,7 +24,7 @@ $ ssh 127.0.0.1 -o UserKnownHostsFile=conf/known_hosts
 
 ## Setting up an example web server
 ```
-$ cat > server.go <<<EOF
+$ cat > server.go <<EOF
 package main
 
 import (
@@ -51,5 +52,5 @@ $ ./sshified --proxy.listen-addr 127.0.0.1:8888 --ssh.user sshified-test --ssh.k
 
 ## Running the benchmark (third shell)
 ```
-$ ab -n20000 -c500 -X localhost:8888 http://127.0.0.1:8080/bar
+$ ab -n20000 -c500 -X 127.0.0.1:8888 http://127.0.0.1:8080/bar
 ```
