@@ -6,30 +6,12 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
-	"strconv"
-	"strings"
-	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 )
-
-func splitAddr(addr string) (host string, port int, err error) {
-	parts := strings.Split(addr, ":")
-	if len(parts) != 2 {
-		err = errors.New("invalid address format")
-		return
-	}
-	host = parts[0]
-	port, err = strconv.Atoi(parts[1])
-	if err != nil {
-		err = errors.New("invalid port number")
-		return
-	}
-	return
-}
 
 func makePubkeyAuth(keyFile string) ([]ssh.AuthMethod, error) {
 	key, err := ioutil.ReadFile(keyFile)
@@ -46,24 +28,22 @@ func makePubkeyAuth(keyFile string) ([]ssh.AuthMethod, error) {
 }
 
 type sshTransport struct {
-	port            int
-	user            string
-	clientConfig    *ssh.ClientConfig
-	clientCache     map[string]*ssh.Client
-	clientCacheLock *sync.RWMutex
-	Transport       http.RoundTripper
-	keyFile         string
-	knownHostsFile  string
+	port           int
+	user           string
+	clientConfig   *ssh.ClientConfig
+	sshClientPool  *sshClientPool
+	Transport      http.RoundTripper
+	keyFile        string
+	knownHostsFile string
 }
 
 func NewSSHTransport(user, keyFile, knownHostsFile string, port int) (*sshTransport, error) {
 	t := &sshTransport{
-		port:            port,
-		clientCache:     make(map[string]*ssh.Client),
-		clientCacheLock: &sync.RWMutex{},
-		keyFile:         keyFile,
-		knownHostsFile:  knownHostsFile,
-		user:            user,
+		port:           port,
+		sshClientPool:  newSSHClientPool(),
+		keyFile:        keyFile,
+		knownHostsFile: knownHostsFile,
+		user:           user,
 	}
 	t.LoadFiles()
 	t.createTransport()
@@ -126,7 +106,7 @@ func (t *sshTransport) dial(network, addr string) (net.Conn, error) {
 			// connection failed? may be caused by lost ssh transport
 			// connection; let's assume it is dead and try again once with a fresh one.
 			log.WithFields(log.Fields{"host": targetHost, "err": err}).Warn("connection failed, retrying with new connection")
-			t.invalidateClientCacheFor(targetHost)
+			t.sshClientPool.delete(targetHost)
 			retry = false
 			continue
 		}
@@ -135,17 +115,8 @@ func (t *sshTransport) dial(network, addr string) (net.Conn, error) {
 	return nil, err
 }
 
-func (t *sshTransport) invalidateClientCacheFor(host string) {
-	t.clientCacheLock.Lock()
-	delete(t.clientCache, host)
-	t.clientCacheLock.Unlock()
-}
-
 func (t *sshTransport) getSSHClient(host string) (*ssh.Client, error) {
-	log.Debug("acquiring cache lock")
-	t.clientCacheLock.RLock()
-	client, cached := t.clientCache[host]
-	t.clientCacheLock.RUnlock()
+	client, cached := t.sshClientPool.get(host)
 	if cached {
 		log.WithFields(log.Fields{"host": host}).Debug("using cached ssh connection")
 		return client, nil
@@ -155,8 +126,7 @@ func (t *sshTransport) getSSHClient(host string) (*ssh.Client, error) {
 	client, err := ssh.Dial("tcp", sshAddr, t.clientConfig)
 	if err == nil {
 		log.WithFields(log.Fields{"host": host}).Debug("caching successful ssh connection")
-		t.clientCacheLock.Lock()
-		cachedClient, cached := t.clientCache[host]
+		cachedClient, cached := t.sshClientPool.setOrGetCached(host, client)
 		if cached {
 			// we already checked above and did not have a cached client.
 			// however, due to concurrent requests, we may now have one.
@@ -165,10 +135,7 @@ func (t *sshTransport) getSSHClient(host string) (*ssh.Client, error) {
 			// instead.
 			client.Close()
 			client = cachedClient
-		} else {
-			t.clientCache[host] = client
 		}
-		t.clientCacheLock.Unlock()
 	}
 	return client, err
 }
