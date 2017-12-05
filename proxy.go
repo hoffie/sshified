@@ -72,7 +72,10 @@ func (pr *proxyRequest) validate() error {
 	if !pr.origReq.URL.IsAbs() {
 		log.WithFields(log.Fields{"url": pr.requestedURL}).Warn("rejecting non-proxy request")
 		pr.rw.WriteHeader(http.StatusBadRequest)
-		pr.rw.Write([]byte("Got non-proxy request.\n"))
+		_, err := pr.rw.Write([]byte("Got non-proxy request.\n"))
+		if err != nil {
+			log.WithFields(log.Fields{"err": err}).Debug("failed to write response")
+		}
 		return errors.New("non-proxy request")
 	}
 	return nil

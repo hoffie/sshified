@@ -45,7 +45,10 @@ func NewSSHTransport(user, keyFile, knownHostsFile string, port int) (*sshTransp
 		knownHostsFile: knownHostsFile,
 		user:           user,
 	}
-	t.LoadFiles()
+	err := t.LoadFiles()
+	if err != nil {
+		return nil, err
+	}
 	t.createTransport()
 	return t, nil
 }
@@ -133,7 +136,7 @@ func (t *sshTransport) getSSHClient(host string) (*ssh.Client, error) {
 			// apparently this is the case here.
 			// therefore, we drop our newly created client and use the cached one
 			// instead.
-			client.Close()
+			_ = client.Close()
 			client = cachedClient
 		}
 	}
