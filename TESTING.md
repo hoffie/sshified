@@ -1,56 +1,36 @@
 # Testing
 Load testing can be performed using ApacheBench (usually part of apache or apache-utils packages).
+It is partly automated via a Makefile.
+First, `go build` sshified, then `cd loadtest` and run the following steps.
 
 ## Preparations
 ```
-$ mkdir conf/
+make prepare
 ```
 
-## Setting up a test user
-```
-$ sudo useradd sshified-test -s /bin/false -m
-$ ssh-keygen -f conf/id_rsa
-$ sudo -u sshified-test mkdir /home/sshified-test/.ssh/
-$ sudo -u sshified-test tee /home/sshified-test/.ssh/authorized_keys < conf/id_rsa.pub
-$ sudo -u sshified-test chmod 700 /home/sshified-test/.ssh/
-$ sudo -u sshified-test chmod 600 /home/sshified-test/.ssh/authorized_keys
-```
-
-## Populating known hosts file
-```
-$ ssh 127.0.0.1 -o UserKnownHostsFile=conf/known_hosts
-# Add key, abort using Ctrl+C
-```
+This will create a local user, generate an SSH keypair, set up the user for pubkey authentication and will populate a local known_hosts file.
 
 ## Setting up an example web server
 ```
-$ cat > server.go <<EOF
-package main
-
-import (
-	"fmt"
-	"html"
-	"log"
-	"net/http"
-)
-
-func main() {
-	http.HandleFunc("/bar", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "Hello, %q", html.EscapeString(r.URL.Path))
-	})
-
-	log.Fatal(http.ListenAndServe(":8080", nil))
-}
-EOF
-$ go run server.go
+make run-webserver
 ```
+This will run an example webserver (go) on port 8080.
 
 ## Running sshified (second shell)
 ```
-$ ./sshified --proxy.listen-addr 127.0.0.1:8888 --ssh.user sshified-test --ssh.key-file conf/id_rsa --ssh.known-hosts-file conf/known_hosts
+make run-sshified
 ```
+This will run sshified with the previously generated key files and defined ports.
 
 ## Running the benchmark (third shell)
 ```
-$ ab -n20000 -c500 -X 127.0.0.1:8888 http://127.0.0.1:8080/bar
+make run-loadtest
 ```
+
+This will run ApacheBench (ab).
+
+## Cleanup
+```
+make cleanup
+```
+This will reverse all actions done by `prepare`, i.e. will delete the user along with its home directory.
