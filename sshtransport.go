@@ -109,6 +109,7 @@ func (t *sshTransport) dial(network, addr string) (net.Conn, error) {
 			// connection failed? may be caused by lost ssh transport
 			// connection; let's assume it is dead and try again once with a fresh one.
 			log.WithFields(log.Fields{"host": targetHost, "err": err}).Warn("connection failed, retrying with new connection")
+			_ = client.Close()
 			t.sshClientPool.delete(targetHost)
 			retry = false
 			continue
