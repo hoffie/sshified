@@ -65,4 +65,3 @@ This software is released under the [Apache 2.0 license](LICENSE).
 ## Author
 sshified has been created by [Christian Hoffmann](https://hoffmann-christian.info/).
 If you find this project useful, please star it or drop me a short [mail](mailto:mail@hoffmann-christian.info).
-Thanks in advance!
