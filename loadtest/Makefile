@@ -25,4 +25,4 @@ run-sshified:
 	../sshified --proxy.listen-addr 127.0.0.1:8888 --ssh.user $(USER) --ssh.key-file conf/id_rsa --ssh.known-hosts-file conf/known_hosts
 
 run-loadtest:
-		ab -n20000 -c500 -X 127.0.0.1:8888 http://127.0.0.1:8080/bar
+	ab -n20000 -c500 -X 127.0.0.1:8888 http://127.0.0.1:8080/bar
