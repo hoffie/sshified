@@ -19,7 +19,15 @@ func NewProxyHandler(ssh *sshTransport) *proxyHandler {
 
 func (ph *proxyHandler) ServeHTTP(rw http.ResponseWriter, origReq *http.Request) {
 	proxyReq := NewProxyRequest(rw, origReq, ph.ssh.Transport)
-	proxyReq.Handle()
+	err := proxyReq.Handle()
+	if err != nil {
+		log.WithFields(log.Fields{
+			"method": origReq.Method,
+			"url":    origReq.URL,
+			"proto":  origReq.Proto,
+			"err":    err,
+		}).Warn("request failed")
+	}
 }
 
 type proxyRequest struct {
@@ -40,28 +48,29 @@ func NewProxyRequest(rw http.ResponseWriter, origReq *http.Request, transport ht
 	}
 }
 
-func (pr *proxyRequest) Handle() {
+func (pr *proxyRequest) Handle() error {
 	log.WithFields(log.Fields{
 		"method": pr.origReq.Method,
 		"url":    pr.origReq.URL,
-		"proto":  pr.origReq.Proto}).Info("handling request")
+		"proto":  pr.origReq.Proto}).Debug("handling request")
 
 	err := pr.validate()
 	if err != nil {
-		return
+		return err
 	}
 	err = pr.buildRequest()
 	if err != nil {
-		return
+		return err
 	}
 	err = pr.sendRequest()
 	if err != nil {
-		return
+		return err
 	}
 	err = pr.forwardResponse()
 	if err != nil {
-		return
+		return err
 	}
+	return nil
 }
 
 func (pr *proxyRequest) validate() error {
