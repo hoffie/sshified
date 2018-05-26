@@ -49,16 +49,13 @@ func NewProxyRequest(rw http.ResponseWriter, origReq *http.Request, transport ht
 }
 
 func (pr *proxyRequest) Handle() error {
+	pr.buildURL()
 	log.WithFields(log.Fields{
 		"method": pr.origReq.Method,
-		"url":    pr.origReq.URL,
+		"url":    pr.requestedURL,
 		"proto":  pr.origReq.Proto}).Debug("handling request")
 
-	err := pr.validate()
-	if err != nil {
-		return err
-	}
-	err = pr.buildRequest()
+	err := pr.buildRequest()
 	if err != nil {
 		return err
 	}
@@ -73,24 +70,14 @@ func (pr *proxyRequest) Handle() error {
 	return nil
 }
 
-func (pr *proxyRequest) validate() error {
+func (pr *proxyRequest) buildURL() {
+	pr.origReq.URL.Scheme = "http"
+	pr.origReq.URL.Host = pr.origReq.Host
 	pr.requestedURL = pr.origReq.URL.String()
-	if pr.origReq.Proto == "HTTP/1.0" && !strings.HasPrefix(pr.requestedURL, "http://") {
-		pr.requestedURL = "http://" + pr.origReq.URL.String()
-	}
-	if !pr.origReq.URL.IsAbs() {
-		log.WithFields(log.Fields{"url": pr.requestedURL}).Warn("rejecting non-proxy request")
-		pr.rw.WriteHeader(http.StatusBadRequest)
-		_, err := pr.rw.Write([]byte("Got non-proxy request.\n"))
-		if err != nil {
-			log.WithFields(log.Fields{"err": err}).Debug("failed to write response")
-		}
-		return errors.New("non-proxy request")
-	}
-	return nil
 }
 
 func (pr *proxyRequest) buildRequest() error {
+	log.WithFields(log.Fields{"method": pr.origReq.Method, "url": pr.requestedURL}).Debug("building upstream request")
 	req, err := http.NewRequest(pr.origReq.Method, pr.requestedURL, nil)
 	pr.upstreamRequest = req
 	if err != nil {

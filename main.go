@@ -14,6 +14,7 @@ import (
 var (
 	verbose           = kingpin.Flag("verbose", "Verbose mode.").Short('v').Bool()
 	proxyAddr         = kingpin.Flag("proxy.listen-addr", "address the proxy will listen on").Required().String()
+	nextProxyAddr     = kingpin.Flag("next-proxy.addr", "optional address of another http proxy when cascading usage is required").String()
 	sshUser           = kingpin.Flag("ssh.user", "username used for connecting via ssh").Required().String()
 	sshKeyFile        = kingpin.Flag("ssh.key-file", "private key file used for connecting via ssh").Required().String()
 	sshKnownHostsFile = kingpin.Flag("ssh.known-hosts-file", "known hosts file used for connecting via ssh").Required().String()
@@ -28,7 +29,10 @@ func main() {
 		log.SetLevel(log.InfoLevel)
 	}
 	log.WithFields(log.Fields{"addr": *proxyAddr}).Info("Listening")
-	sshTransport, err := NewSSHTransport(*sshUser, *sshKeyFile, *sshKnownHostsFile, *sshPort)
+	if *nextProxyAddr != "" {
+		log.WithFields(log.Fields{"nextProxyAddr": *nextProxyAddr}).Info("Running in cascading mode: will ssh to nextProxyAddr and use the http proxy there")
+	}
+	sshTransport, err := NewSSHTransport(*sshUser, *sshKeyFile, *sshKnownHostsFile, *sshPort, *nextProxyAddr)
 	if err != nil {
 		log.WithFields(log.Fields{"err": err}).Fatal("failed to set up ssh config")
 	}

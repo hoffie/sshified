@@ -35,15 +35,17 @@ type sshTransport struct {
 	Transport      http.RoundTripper
 	keyFile        string
 	knownHostsFile string
+	nextProxyAddr  string
 }
 
-func NewSSHTransport(user, keyFile, knownHostsFile string, port int) (*sshTransport, error) {
+func NewSSHTransport(user, keyFile, knownHostsFile string, port int, nextProxyAddr string) (*sshTransport, error) {
 	t := &sshTransport{
 		port:           port,
 		sshClientPool:  newSSHClientPool(),
 		keyFile:        keyFile,
 		knownHostsFile: knownHostsFile,
 		user:           user,
+		nextProxyAddr:  nextProxyAddr,
 	}
 	err := t.LoadFiles()
 	if err != nil {
@@ -91,6 +93,9 @@ func (t *sshTransport) dial(network, addr string) (net.Conn, error) {
 	if network != "tcp" {
 		log.WithFields(log.Fields{"network": network, "addr": addr}).Error("network type not supported")
 		return nil, fmt.Errorf("network type %s is not supported", network)
+	}
+	if t.nextProxyAddr != "" {
+		addr = t.nextProxyAddr
 	}
 	targetHost, targetPort, err := splitAddr(addr)
 	if err != nil {
