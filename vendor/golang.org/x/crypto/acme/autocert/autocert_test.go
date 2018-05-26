@@ -14,15 +14,19 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
+	"io/ioutil"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -48,6 +52,16 @@ var authzTmpl = template.Must(template.New("authz").Parse(`{
 			"uri": "{{.}}/challenge/2",
 			"type": "tls-sni-02",
 			"token": "token-02"
+		},
+		{
+			"uri": "{{.}}/challenge/dns-01",
+			"type": "dns-01",
+			"token": "token-dns-01"
+		},
+		{
+			"uri": "{{.}}/challenge/http-01",
+			"type": "http-01",
+			"token": "token-http-01"
 		}
 	]
 }`))
@@ -419,6 +433,243 @@ func testGetCertificate(t *testing.T, man *Manager, domain string, hello *tls.Cl
 
 }
 
+func TestVerifyHTTP01(t *testing.T) {
+	var (
+		http01 http.Handler
+
+		authzCount      int // num. of created authorizations
+		didAcceptHTTP01 bool
+	)
+
+	verifyHTTPToken := func() {
+		r := httptest.NewRequest("GET", "/.well-known/acme-challenge/token-http-01", nil)
+		w := httptest.NewRecorder()
+		http01.ServeHTTP(w, r)
+		if w.Code != http.StatusOK {
+			t.Errorf("http token: w.Code = %d; want %d", w.Code, http.StatusOK)
+		}
+		if v := string(w.Body.Bytes()); !strings.HasPrefix(v, "token-http-01.") {
+			t.Errorf("http token value = %q; want 'token-http-01.' prefix", v)
+		}
+	}
+
+	// ACME CA server stub, only the needed bits.
+	// TODO: Merge this with startACMEServerStub, making it a configurable CA for testing.
+	var ca *httptest.Server
+	ca = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Replay-Nonce", "nonce")
+		if r.Method == "HEAD" {
+			// a nonce request
+			return
+		}
+
+		switch r.URL.Path {
+		// Discovery.
+		case "/":
+			if err := discoTmpl.Execute(w, ca.URL); err != nil {
+				t.Errorf("discoTmpl: %v", err)
+			}
+		// Client key registration.
+		case "/new-reg":
+			w.Write([]byte("{}"))
+		// New domain authorization.
+		case "/new-authz":
+			authzCount++
+			w.Header().Set("Location", fmt.Sprintf("%s/authz/%d", ca.URL, authzCount))
+			w.WriteHeader(http.StatusCreated)
+			if err := authzTmpl.Execute(w, ca.URL); err != nil {
+				t.Errorf("authzTmpl: %v", err)
+			}
+		// Accept tls-sni-02.
+		case "/challenge/2":
+			w.Write([]byte("{}"))
+		// Reject tls-sni-01.
+		case "/challenge/1":
+			http.Error(w, "won't accept tls-sni-01", http.StatusBadRequest)
+		// Should not accept dns-01.
+		case "/challenge/dns-01":
+			t.Errorf("dns-01 challenge was accepted")
+			http.Error(w, "won't accept dns-01", http.StatusBadRequest)
+		// Accept http-01.
+		case "/challenge/http-01":
+			didAcceptHTTP01 = true
+			verifyHTTPToken()
+			w.Write([]byte("{}"))
+		// Authorization statuses.
+		// Make tls-sni-xxx invalid.
+		case "/authz/1", "/authz/2":
+			w.Write([]byte(`{"status": "invalid"}`))
+		case "/authz/3", "/authz/4":
+			w.Write([]byte(`{"status": "valid"}`))
+		default:
+			http.NotFound(w, r)
+			t.Errorf("unrecognized r.URL.Path: %s", r.URL.Path)
+		}
+	}))
+	defer ca.Close()
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{
+		Client: &acme.Client{
+			Key:          key,
+			DirectoryURL: ca.URL,
+		},
+	}
+	http01 = m.HTTPHandler(nil)
+	if err := m.verify(context.Background(), m.Client, "example.org"); err != nil {
+		t.Errorf("m.verify: %v", err)
+	}
+	// Only tls-sni-01, tls-sni-02 and http-01 must be accepted
+	// The dns-01 challenge is unsupported.
+	if authzCount != 3 {
+		t.Errorf("authzCount = %d; want 3", authzCount)
+	}
+	if !didAcceptHTTP01 {
+		t.Error("did not accept http-01 challenge")
+	}
+}
+
+func TestRevokeFailedAuth(t *testing.T) {
+	var (
+		authzCount int     // num. of created authorizations
+		revoked    [3]bool // there will be three different authorization attempts; see below
+	)
+
+	// make cleanup revocations synchronous
+	waitForRevocations = true
+
+	// ACME CA server stub, only the needed bits.
+	// TODO: Merge this with startACMEServerStub, making it a configurable CA for testing.
+	var ca *httptest.Server
+	ca = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Replay-Nonce", "nonce")
+		if r.Method == "HEAD" {
+			// a nonce request
+			return
+		}
+
+		switch r.URL.Path {
+		// Discovery.
+		case "/":
+			if err := discoTmpl.Execute(w, ca.URL); err != nil {
+				t.Errorf("discoTmpl: %v", err)
+			}
+		// Client key registration.
+		case "/new-reg":
+			w.Write([]byte("{}"))
+		// New domain authorization.
+		case "/new-authz":
+			w.Header().Set("Location", fmt.Sprintf("%s/authz/%d", ca.URL, authzCount))
+			w.WriteHeader(http.StatusCreated)
+			if err := authzTmpl.Execute(w, ca.URL); err != nil {
+				t.Errorf("authzTmpl: %v", err)
+			}
+			authzCount++
+		// force error on Accept()
+		case "/challenge/2":
+			http.Error(w, "won't accept tls-sni-02 challenge", http.StatusBadRequest)
+		// accept; authorization will be expired (404; see /authz/1 below)
+		case "/challenge/1":
+			w.Write([]byte("{}"))
+		// Authorization statuses.
+		case "/authz/0", "/authz/1", "/authz/2":
+			if r.Method == "POST" {
+				body, err := ioutil.ReadAll(r.Body)
+				if err != nil {
+					t.Errorf("could not read request body")
+				}
+				if reflect.DeepEqual(body, []byte(`{"status": "deactivated"}`)) {
+					t.Errorf("unexpected POST to authz: '%s'", body)
+				}
+				i, err := strconv.ParseInt(r.URL.Path[len(r.URL.Path)-1:], 10, 64)
+				if err != nil {
+					t.Errorf("could not convert authz ID to int")
+				}
+				revoked[i] = true
+				w.Write([]byte(`{"status": "invalid"}`))
+			} else {
+				switch r.URL.Path {
+				case "/authz/0":
+					// ensure we get a spurious validation if error forcing did not work (see above)
+					w.Write([]byte(`{"status": "valid"}`))
+				case "/authz/1":
+					// force error during WaitAuthorization()
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}
+		default:
+			http.NotFound(w, r)
+			t.Errorf("unrecognized r.URL.Path: %s", r.URL.Path)
+		}
+	}))
+	defer ca.Close()
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{
+		Client: &acme.Client{
+			Key:          key,
+			DirectoryURL: ca.URL,
+		},
+	}
+
+	// should fail and revoke tsl-sni-02, tls-sni-01 and the third time after not finding any remaining challenges
+	if err := m.verify(context.Background(), m.Client, "example.org"); err == nil {
+		t.Errorf("m.verify should have failed!")
+	}
+	for i := range revoked {
+		if !revoked[i] {
+			t.Errorf("authorization attempt %d not revoked after error", i)
+		}
+	}
+}
+
+func TestHTTPHandlerDefaultFallback(t *testing.T) {
+	tt := []struct {
+		method, url  string
+		wantCode     int
+		wantLocation string
+	}{
+		{"GET", "http://example.org", 302, "https://example.org/"},
+		{"GET", "http://example.org/foo", 302, "https://example.org/foo"},
+		{"GET", "http://example.org/foo/bar/", 302, "https://example.org/foo/bar/"},
+		{"GET", "http://example.org/?a=b", 302, "https://example.org/?a=b"},
+		{"GET", "http://example.org/foo?a=b", 302, "https://example.org/foo?a=b"},
+		{"GET", "http://example.org:80/foo?a=b", 302, "https://example.org:443/foo?a=b"},
+		{"GET", "http://example.org:80/foo%20bar", 302, "https://example.org:443/foo%20bar"},
+		{"GET", "http://[2602:d1:xxxx::c60a]:1234", 302, "https://[2602:d1:xxxx::c60a]:443/"},
+		{"GET", "http://[2602:d1:xxxx::c60a]", 302, "https://[2602:d1:xxxx::c60a]/"},
+		{"GET", "http://[2602:d1:xxxx::c60a]/foo?a=b", 302, "https://[2602:d1:xxxx::c60a]/foo?a=b"},
+		{"HEAD", "http://example.org", 302, "https://example.org/"},
+		{"HEAD", "http://example.org/foo", 302, "https://example.org/foo"},
+		{"HEAD", "http://example.org/foo/bar/", 302, "https://example.org/foo/bar/"},
+		{"HEAD", "http://example.org/?a=b", 302, "https://example.org/?a=b"},
+		{"HEAD", "http://example.org/foo?a=b", 302, "https://example.org/foo?a=b"},
+		{"POST", "http://example.org", 400, ""},
+		{"PUT", "http://example.org", 400, ""},
+		{"GET", "http://example.org/.well-known/acme-challenge/x", 404, ""},
+	}
+	var m Manager
+	h := m.HTTPHandler(nil)
+	for i, test := range tt {
+		r := httptest.NewRequest(test.method, test.url, nil)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != test.wantCode {
+			t.Errorf("%d: w.Code = %d; want %d", i, w.Code, test.wantCode)
+			t.Errorf("%d: body: %s", i, w.Body.Bytes())
+		}
+		if v := w.Header().Get("Location"); v != test.wantLocation {
+			t.Errorf("%d: Location = %q; want %q", i, v, test.wantLocation)
+		}
+	}
+}
+
 func TestAccountKeyCache(t *testing.T) {
 	m := Manager{Cache: newMemCache()}
 	ctx := context.Background()
@@ -602,5 +853,35 @@ func TestManagerGetCertificateBogusSNI(t *testing.T) {
 		if got != tt.wantErr {
 			t.Errorf("GetCertificate(SNI = %q) = %q; want %q", tt.name, got, tt.wantErr)
 		}
+	}
+}
+
+func TestCertRequest(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An extension from RFC7633. Any will do.
+	ext := pkix.Extension{
+		Id:    asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 1},
+		Value: []byte("dummy"),
+	}
+	b, err := certRequest(key, "example.org", []pkix.Extension{ext}, "san.example.org")
+	if err != nil {
+		t.Fatalf("certRequest: %v", err)
+	}
+	r, err := x509.ParseCertificateRequest(b)
+	if err != nil {
+		t.Fatalf("ParseCertificateRequest: %v", err)
+	}
+	var found bool
+	for _, v := range r.Extensions {
+		if v.Id.Equal(ext.Id) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("want %v in Extensions: %v", ext, r.Extensions)
 	}
 }

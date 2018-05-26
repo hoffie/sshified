@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -49,6 +50,8 @@ func NewProxyRequest(rw http.ResponseWriter, origReq *http.Request, transport ht
 }
 
 func (pr *proxyRequest) Handle() error {
+	timer := prometheus.NewTimer(metricRequestDuration)
+	defer timer.ObserveDuration()
 	pr.buildURL()
 	log.WithFields(log.Fields{
 		"method": pr.origReq.Method,
@@ -57,16 +60,20 @@ func (pr *proxyRequest) Handle() error {
 
 	err := pr.buildRequest()
 	if err != nil {
+		metricRequestsTotal.WithLabelValues("badreq").Inc()
 		return err
 	}
 	err = pr.sendRequest()
 	if err != nil {
+		metricRequestsTotal.WithLabelValues("send-fail").Inc()
 		return err
 	}
 	err = pr.forwardResponse()
 	if err != nil {
+		metricRequestsTotal.WithLabelValues("forward-fail").Inc()
 		return err
 	}
+	metricRequestsTotal.WithLabelValues("ok").Inc()
 	return nil
 }
 
@@ -129,11 +136,13 @@ func (pr *proxyRequest) forwardResponse() error {
 		}
 	}
 	pr.rw.WriteHeader(pr.upstreamResponse.StatusCode)
-	log.WithFields(log.Fields{"len": pr.upstreamResponse.ContentLength}).Debug("copying response body")
-	_, err := io.Copy(pr.rw, pr.upstreamResponse.Body)
+	log.Debug("copying response body")
+	length, err := io.Copy(pr.rw, pr.upstreamResponse.Body)
 	if err != nil {
 		log.WithFields(log.Fields{"err": err}).Error("failed to forward response body")
 		return errors.New("failed to forward response body")
 	}
+	log.WithFields(log.Fields{"len": length}).Debug("done with copying response body")
+	metricPayloadBytes.Add(float64(length))
 	return nil
 }

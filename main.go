@@ -15,6 +15,7 @@ var (
 	verbose           = kingpin.Flag("verbose", "Verbose mode.").Short('v').Bool()
 	proxyAddr         = kingpin.Flag("proxy.listen-addr", "address the proxy will listen on").Required().String()
 	nextProxyAddr     = kingpin.Flag("next-proxy.addr", "optional address of another http proxy when cascading usage is required").String()
+	metricsAddr       = kingpin.Flag("metrics.listen-addr", "adress the service will listen on for metrics request about itself").String()
 	sshUser           = kingpin.Flag("ssh.user", "username used for connecting via ssh").Required().String()
 	sshKeyFile        = kingpin.Flag("ssh.key-file", "private key file used for connecting via ssh").Required().String()
 	sshKnownHostsFile = kingpin.Flag("ssh.known-hosts-file", "known hosts file used for connecting via ssh").Required().String()
@@ -44,6 +45,8 @@ func main() {
 		WriteTimeout:   10 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
+
+	setupMetrics(*metricsAddr)
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGHUP)
 
