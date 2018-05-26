@@ -29,12 +29,17 @@ var (
 			Buckets: []float64{0.01, 0.1, 0.5, 1.0, 2.0, 5.0},
 		},
 	)
-	metricRequestsTotal = prometheus.NewCounterVec(
+	metricRequestsTotal = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Name: "sshified_requests_total",
 			Help: "Total of all requests",
 		},
-		[]string{"code"},
+	)
+	metricRequestsFailedTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "sshified_requests_failed_total",
+			Help: "Total of failed requests",
+		},
 	)
 )
 
@@ -43,6 +48,7 @@ func init() {
 	prometheus.MustRegister(metricSshclientPool)
 	prometheus.MustRegister(metricRequestDuration)
 	prometheus.MustRegister(metricRequestsTotal)
+	prometheus.MustRegister(metricRequestsFailedTotal)
 }
 
 func setupMetrics(addr string) {

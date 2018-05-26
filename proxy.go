@@ -50,6 +50,7 @@ func NewProxyRequest(rw http.ResponseWriter, origReq *http.Request, transport ht
 }
 
 func (pr *proxyRequest) Handle() error {
+	metricRequestsTotal.Inc()
 	timer := prometheus.NewTimer(metricRequestDuration)
 	defer timer.ObserveDuration()
 	pr.buildURL()
@@ -60,20 +61,19 @@ func (pr *proxyRequest) Handle() error {
 
 	err := pr.buildRequest()
 	if err != nil {
-		metricRequestsTotal.WithLabelValues("badreq").Inc()
+		metricRequestsFailedTotal.Inc()
 		return err
 	}
 	err = pr.sendRequest()
 	if err != nil {
-		metricRequestsTotal.WithLabelValues("send-fail").Inc()
+		metricRequestsFailedTotal.Inc()
 		return err
 	}
 	err = pr.forwardResponse()
 	if err != nil {
-		metricRequestsTotal.WithLabelValues("forward-fail").Inc()
+		metricRequestsFailedTotal.Inc()
 		return err
 	}
-	metricRequestsTotal.WithLabelValues("ok").Inc()
 	return nil
 }
 
