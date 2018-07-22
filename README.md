@@ -40,6 +40,8 @@ All your target servers need to fullfil the following requirements:
 * a user (no shell access required; restricting the user via `ForceCommand` in `sshd_config` is recommended)
 * public key authentication (`authorized_keys`)
 
+The server running sshified is supposed to provide a `known_hosts` which contains entries for all possible targets.
+
 It is recommended that this is managed using some configuration management tool such as Puppet.
 
 ## Run
