@@ -18,9 +18,10 @@ Currently, no HTTPS (or general CONNECT) support is implemented or planned.
 
 ## Status
 This project is considered feature-complete.
-It has proven to work even with hundreds of concurrent connections.
+It has been used in production with several hundreds connections for many months now.
+
+Synthetic tests can be run in order to prove stability.
 For more details, see [TESTING](TESTING.md).
-It is recommended that long-term tests be run before putting this tool into production.
 
 ## Build
 This tool is built using Go (tested with 1.9.2 or newer).
