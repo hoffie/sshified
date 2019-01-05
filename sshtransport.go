@@ -81,6 +81,7 @@ func (t *sshTransport) createTransport() {
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
+		DisableKeepAlives:     true,
 	}
 }
 
