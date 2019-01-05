@@ -80,6 +80,7 @@ func (t *sshTransport) createTransport() {
 		// FIXME: DialContext
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 		DisableKeepAlives:     true,
 	}
