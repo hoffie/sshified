@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
@@ -107,6 +108,7 @@ func (pr *proxyRequest) buildRequest() error {
 	pr.upstreamRequest.Body = pr.origReq.Body
 	pr.upstreamClient = &http.Client{
 		Transport: pr.transport,
+		Timeout:   60 * time.Second,
 	}
 	return nil
 }
