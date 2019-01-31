@@ -112,9 +112,13 @@ func (t *sshTransport) dial(network, addr string) (net.Conn, error) {
 		conn, err := client.Dial("tcp4", fmt.Sprintf("%s:%d", "127.0.0.1", targetPort))
 		log.WithFields(log.Fields{"port": targetPort, "err": err}).Debug("done")
 		if err != nil {
-			// connection failed? may be caused by lost ssh transport
-			// connection; let's assume it is dead and try again once with a fresh one.
-			log.WithFields(log.Fields{"host": targetHost, "err": err}).Warn("connection failed, retrying with new connection")
+			log.WithFields(log.Fields{"host": targetHost, "err": err}).Warn("connection failed, sending keepalive")
+			_, _, keepAliveErr := client.SendRequest("keepalive@openssh.com", true, nil)
+			if keepAliveErr == nil {
+				log.WithFields(log.Fields{"host": targetHost}).Warn("keepalive worked, this is not an ssh conn problem")
+				return nil, err
+			}
+			log.WithFields(log.Fields{"host": targetHost, "err": keepAliveErr}).Warn("keepalive failed, reconnecting")
 			t.sshClientPool.delete(targetHost)
 			_ = client.Close()
 			retry = false
