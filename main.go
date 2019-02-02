@@ -13,6 +13,7 @@ import (
 
 var (
 	verbose           = kingpin.Flag("verbose", "Verbose mode.").Short('v').Bool()
+	trace             = kingpin.Flag("trace", "Trace mode.").Bool()
 	proxyAddr         = kingpin.Flag("proxy.listen-addr", "address the proxy will listen on").Required().String()
 	nextProxyAddr     = kingpin.Flag("next-proxy.addr", "optional address of another http proxy when cascading usage is required").String()
 	metricsAddr       = kingpin.Flag("metrics.listen-addr", "adress the service will listen on for metrics request about itself").String()
@@ -24,7 +25,9 @@ var (
 
 func main() {
 	kingpin.Parse()
-	if *verbose {
+	if *trace {
+		log.SetLevel(log.TraceLevel)
+	} else if *verbose {
 		log.SetLevel(log.DebugLevel)
 	} else {
 		log.SetLevel(log.InfoLevel)

@@ -28,7 +28,7 @@ func (ph *proxyHandler) ServeHTTP(rw http.ResponseWriter, origReq *http.Request)
 			"url":    origReq.URL,
 			"proto":  origReq.Proto,
 			"err":    err,
-		}).Warn("request failed")
+		}).Debug("request failed")
 	}
 }
 
@@ -58,7 +58,7 @@ func (pr *proxyRequest) Handle() error {
 	log.WithFields(log.Fields{
 		"method": pr.origReq.Method,
 		"url":    pr.requestedURL,
-		"proto":  pr.origReq.Proto}).Debug("handling request")
+		"proto":  pr.origReq.Proto}).Trace("handling request")
 
 	err := pr.buildRequest()
 	if err != nil {
@@ -85,7 +85,7 @@ func (pr *proxyRequest) buildURL() {
 }
 
 func (pr *proxyRequest) buildRequest() error {
-	log.WithFields(log.Fields{"method": pr.origReq.Method, "url": pr.requestedURL}).Debug("building upstream request")
+	log.WithFields(log.Fields{"method": pr.origReq.Method, "url": pr.requestedURL}).Trace("building upstream request")
 	req, err := http.NewRequest(pr.origReq.Method, pr.requestedURL, nil)
 	pr.upstreamRequest = req
 	if err != nil {
@@ -101,7 +101,7 @@ func (pr *proxyRequest) buildRequest() error {
 			continue
 		}
 		for _, v := range vv {
-			log.WithFields(log.Fields{"header": k, "value": v}).Debug("copying request header")
+			log.WithFields(log.Fields{"header": k, "value": v}).Trace("copying request header")
 			pr.upstreamRequest.Header.Add(k, v)
 		}
 	}
@@ -114,12 +114,12 @@ func (pr *proxyRequest) buildRequest() error {
 }
 
 func (pr *proxyRequest) sendRequest() error {
-	log.Debug("beginning http request")
+	log.Trace("beginning http request")
 	upstreamResponse, err := pr.upstreamClient.Do(pr.upstreamRequest)
-	log.Debug("finished http request")
+	log.Trace("finished http request")
 	if err != nil {
 		pr.rw.WriteHeader(http.StatusBadGateway)
-		log.WithFields(log.Fields{"err": err}).Error("upstream request failed")
+		log.WithFields(log.Fields{"err": err}).Debug("upstream request failed")
 		return errors.New("upstream request failed")
 	}
 	pr.upstreamResponse = upstreamResponse
@@ -133,18 +133,18 @@ func (pr *proxyRequest) forwardResponse() error {
 			continue
 		}
 		for _, v := range vv {
-			log.WithFields(log.Fields{"header": k, "value": v}).Debug("copying response header")
+			log.WithFields(log.Fields{"header": k, "value": v}).Trace("copying response header")
 			respHeader.Add(k, v)
 		}
 	}
 	pr.rw.WriteHeader(pr.upstreamResponse.StatusCode)
-	log.Debug("copying response body")
+	log.Trace("copying response body")
 	length, err := io.Copy(pr.rw, pr.upstreamResponse.Body)
 	if err != nil {
-		log.WithFields(log.Fields{"err": err}).Error("failed to forward response body")
+		log.WithFields(log.Fields{"err": err}).Debug("failed to forward response body")
 		return errors.New("failed to forward response body")
 	}
-	log.WithFields(log.Fields{"len": length}).Debug("done with copying response body")
+	log.WithFields(log.Fields{"len": length}).Trace("done with copying response body")
 	metricPayloadBytes.Add(float64(length))
 	return nil
 }

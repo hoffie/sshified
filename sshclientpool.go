@@ -28,7 +28,7 @@ func (p *sshClientPool) delete(host string) {
 }
 
 func (p *sshClientPool) get(host string) (*ssh.Client, bool) {
-	log.Debug("acquiring cache lock")
+	log.Trace("acquiring cache lock")
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 	client, cached := p.pool[host]

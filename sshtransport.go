@@ -108,17 +108,17 @@ func (t *sshTransport) dial(network, addr string) (net.Conn, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to obtain ssh connection: %s", err)
 		}
-		log.WithFields(log.Fields{"port": targetPort}).Debug("connecting")
+		log.WithFields(log.Fields{"port": targetPort}).Trace("connecting")
 		conn, err := client.Dial("tcp4", fmt.Sprintf("%s:%d", "127.0.0.1", targetPort))
-		log.WithFields(log.Fields{"port": targetPort, "err": err}).Debug("done")
+		log.WithFields(log.Fields{"port": targetPort, "err": err}).Trace("done")
 		if err != nil {
-			log.WithFields(log.Fields{"host": targetHost, "err": err}).Warn("connection failed, sending keepalive")
+			log.WithFields(log.Fields{"host": targetHost, "err": err}).Debug("connection failed, sending keepalive")
 			_, _, keepAliveErr := client.SendRequest("keepalive@openssh.com", true, nil)
 			if keepAliveErr == nil {
-				log.WithFields(log.Fields{"host": targetHost}).Warn("keepalive worked, this is not an ssh conn problem")
+				log.WithFields(log.Fields{"host": targetHost}).Debug("keepalive worked, this is not an ssh conn problem")
 				return nil, err
 			}
-			log.WithFields(log.Fields{"host": targetHost, "err": keepAliveErr}).Warn("keepalive failed, reconnecting")
+			log.WithFields(log.Fields{"host": targetHost, "err": keepAliveErr}).Debug("keepalive failed, reconnecting")
 			t.sshClientPool.delete(targetHost)
 			_ = client.Close()
 			retry = false
@@ -132,14 +132,14 @@ func (t *sshTransport) dial(network, addr string) (net.Conn, error) {
 func (t *sshTransport) getSSHClient(host string) (*ssh.Client, error) {
 	client, cached := t.sshClientPool.get(host)
 	if cached {
-		log.WithFields(log.Fields{"host": host}).Debug("using cached ssh connection")
+		log.WithFields(log.Fields{"host": host}).Trace("using cached ssh connection")
 		return client, nil
 	}
-	log.WithFields(log.Fields{"host": host}).Debug("building ssh connection")
+	log.WithFields(log.Fields{"host": host}).Trace("building ssh connection")
 	sshAddr := fmt.Sprintf("%s:%d", host, t.port)
 	client, err := ssh.Dial("tcp", sshAddr, t.clientConfig)
 	if err == nil {
-		log.WithFields(log.Fields{"host": host}).Debug("caching successful ssh connection")
+		log.WithFields(log.Fields{"host": host}).Trace("caching successful ssh connection")
 		cachedClient, cached := t.sshClientPool.setOrGetCached(host, client)
 		if cached {
 			// we already checked above and did not have a cached client.
