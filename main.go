@@ -21,6 +21,7 @@ var (
 	sshKeyFile        = kingpin.Flag("ssh.key-file", "private key file used for connecting via ssh").Required().String()
 	sshKnownHostsFile = kingpin.Flag("ssh.known-hosts-file", "known hosts file used for connecting via ssh").Required().String()
 	sshPort           = kingpin.Flag("ssh.port", "port used for connecting via ssh").Default("22").Int()
+	timeout           = kingpin.Flag("timeout", "full roundtrip request timeout in seconds").Default("50").Int()
 )
 
 func main() {

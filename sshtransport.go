@@ -68,7 +68,7 @@ func (t *sshTransport) LoadFiles() error {
 		User:            t.user,
 		Auth:            auth,
 		HostKeyCallback: knownHosts,
-		Timeout:         5 * time.Second,
+		Timeout:         time.Duration(*timeout) * time.Second,
 	}
 	return nil
 }
@@ -79,8 +79,8 @@ func (t *sshTransport) createTransport() {
 		Dial:  t.dial,
 		// FIXME: DialContext
 		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		ResponseHeaderTimeout: 10 * time.Second,
+		IdleConnTimeout:       time.Duration(*timeout) * 2 * time.Second,
+		ResponseHeaderTimeout: time.Duration(*timeout) * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 	}
 }

@@ -108,7 +108,7 @@ func (pr *proxyRequest) buildRequest() error {
 	pr.upstreamRequest.Body = pr.origReq.Body
 	pr.upstreamClient = &http.Client{
 		Transport: pr.transport,
-		Timeout:   60 * time.Second,
+		Timeout:   time.Duration(*timeout) * time.Second,
 	}
 	return nil
 }
