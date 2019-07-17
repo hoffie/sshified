@@ -46,7 +46,7 @@ func main() {
 		Addr:           *proxyAddr,
 		Handler:        ph,
 		ReadTimeout:    10 * time.Second,
-		WriteTimeout:   10 * time.Second,
+		WriteTimeout:   time.Duration(*timeout) * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
 
