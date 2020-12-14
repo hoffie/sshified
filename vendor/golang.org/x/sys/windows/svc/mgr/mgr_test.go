@@ -7,6 +7,7 @@
 package mgr_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -79,6 +80,9 @@ func testConfig(t *testing.T, s *mgr.Service, should mgr.Config) mgr.Config {
 	is, err := s.Config()
 	if err != nil {
 		t.Fatalf("Config failed: %s", err)
+	}
+	if should.DelayedAutoStart != is.DelayedAutoStart {
+		t.Fatalf("config mismatch: DelayedAutoStart is %v, but should have %v", is.DelayedAutoStart, should.DelayedAutoStart)
 	}
 	if should.DisplayName != is.DisplayName {
 		t.Fatalf("config mismatch: DisplayName is %q, but should have %q", is.DisplayName, should.DisplayName)
@@ -214,7 +218,7 @@ func TestMyService(t *testing.T) {
 		t.Skip("skipping test in short mode - it modifies system services")
 	}
 
-	const name = "myservice"
+	const name = "mymgrservice"
 
 	m, err := mgr.Connect()
 	if err != nil {
@@ -257,6 +261,15 @@ func TestMyService(t *testing.T) {
 
 	testConfig(t, s, c)
 
+	c.StartType = mgr.StartAutomatic
+	c.DelayedAutoStart = true
+	err = s.UpdateConfig(c)
+	if err != nil {
+		t.Fatalf("UpdateConfig failed: %v", err)
+	}
+
+	testConfig(t, s, c)
+
 	svcnames, err := m.ListServices()
 	if err != nil {
 		t.Fatalf("ListServices failed: %v", err)
@@ -273,9 +286,9 @@ func TestMyService(t *testing.T) {
 	}
 
 	testSetRecoveryActions(t, s)
-	testRebootMessage(t, s, "myservice failed")
+	testRebootMessage(t, s, fmt.Sprintf("%s failed", name))
 	testRebootMessage(t, s, "") // delete reboot message
-	testRecoveryCommand(t, s, "sc query myservice")
+	testRecoveryCommand(t, s, fmt.Sprintf("sc query %s", name))
 	testRecoveryCommand(t, s, "") // delete recovery command
 
 	remove(t, s)

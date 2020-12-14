@@ -165,7 +165,7 @@ func TestFcntlFlock(t *testing.T) {
 // "-test.run=^TestPassFD$" and an environment variable used to signal
 // that the test should become the child process instead.
 func TestPassFD(t *testing.T) {
-	if runtime.GOOS == "darwin" && (runtime.GOARCH == "arm" || runtime.GOARCH == "arm64") {
+	if (runtime.GOOS == "darwin" || runtime.GOOS == "ios") && (runtime.GOARCH == "arm" || runtime.GOARCH == "arm64") {
 		t.Skip("cannot exec subprocess on iOS, skipping test")
 	}
 
@@ -377,11 +377,11 @@ func TestRlimit(t *testing.T) {
 	}
 	set := rlimit
 	set.Cur = set.Max - 1
-	if runtime.GOOS == "darwin" && set.Cur > 10240 {
-		// The max file limit is 10240, even though
-		// the max returned by Getrlimit is 1<<63-1.
-		// This is OPEN_MAX in sys/syslimits.h.
-		set.Cur = 10240
+	if (runtime.GOOS == "darwin" || runtime.GOOS == "ios") && set.Cur > 4096 {
+		// rlim_min for RLIMIT_NOFILE should be equal to
+		// or lower than kern.maxfilesperproc, which on
+		// some machines are 4096. See #40564.
+		set.Cur = 4096
 	}
 	err = unix.Setrlimit(unix.RLIMIT_NOFILE, &set)
 	if err != nil {
@@ -394,12 +394,15 @@ func TestRlimit(t *testing.T) {
 	}
 	set = rlimit
 	set.Cur = set.Max - 1
+	if (runtime.GOOS == "darwin" || runtime.GOOS == "ios") && set.Cur > 4096 {
+		set.Cur = 4096
+	}
 	if set != get {
 		// Seems like Darwin requires some privilege to
 		// increase the soft limit of rlimit sandbox, though
 		// Setrlimit never reports an error.
 		switch runtime.GOOS {
-		case "darwin":
+		case "darwin", "ios":
 		default:
 			t.Fatalf("Rlimit: change failed: wanted %#v got %#v", set, get)
 		}
@@ -407,6 +410,12 @@ func TestRlimit(t *testing.T) {
 	err = unix.Setrlimit(unix.RLIMIT_NOFILE, &rlimit)
 	if err != nil {
 		t.Fatalf("Setrlimit: restore failed: %#v %v", rlimit, err)
+	}
+
+	// make sure RLIM_INFINITY can be assigned to Rlimit members
+	_ = unix.Rlimit{
+		Cur: unix.RLIM_INFINITY,
+		Max: unix.RLIM_INFINITY,
 	}
 }
 
@@ -480,7 +489,7 @@ func TestDup(t *testing.T) {
 
 func TestPoll(t *testing.T) {
 	if runtime.GOOS == "android" ||
-		(runtime.GOOS == "darwin" && (runtime.GOARCH == "arm" || runtime.GOARCH == "arm64")) {
+		((runtime.GOOS == "darwin" || runtime.GOOS == "ios") && (runtime.GOARCH == "arm" || runtime.GOARCH == "arm64")) {
 		t.Skip("mkfifo syscall is not available on android and iOS, skipping test")
 	}
 
@@ -512,6 +521,79 @@ func TestPoll(t *testing.T) {
 	}
 }
 
+func TestSelect(t *testing.T) {
+	for {
+		n, err := unix.Select(0, nil, nil, nil, &unix.Timeval{Sec: 0, Usec: 0})
+		if err == unix.EINTR {
+			t.Logf("Select interrupted")
+			continue
+		} else if err != nil {
+			t.Fatalf("Select: %v", err)
+		}
+		if n != 0 {
+			t.Fatalf("Select: got %v ready file descriptors, expected 0", n)
+		}
+		break
+	}
+
+	dur := 250 * time.Millisecond
+	var took time.Duration
+	for {
+		// On some platforms (e.g. Linux), the passed-in timeval is
+		// updated by select(2). Make sure to reset to the full duration
+		// in case of an EINTR.
+		tv := unix.NsecToTimeval(int64(dur))
+		start := time.Now()
+		n, err := unix.Select(0, nil, nil, nil, &tv)
+		took = time.Since(start)
+		if err == unix.EINTR {
+			t.Logf("Select interrupted after %v", took)
+			continue
+		} else if err != nil {
+			t.Fatalf("Select: %v", err)
+		}
+		if n != 0 {
+			t.Fatalf("Select: got %v ready file descriptors, expected 0", n)
+		}
+		break
+	}
+
+	// On some BSDs the actual timeout might also be slightly less than the requested.
+	// Add an acceptable margin to avoid flaky tests.
+	if took < dur*2/3 {
+		t.Errorf("Select: got %v timeout, expected at least %v", took, dur)
+	}
+
+	rr, ww, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rr.Close()
+	defer ww.Close()
+
+	if _, err := ww.Write([]byte("HELLO GOPHER")); err != nil {
+		t.Fatal(err)
+	}
+
+	rFdSet := &unix.FdSet{}
+	fd := int(rr.Fd())
+	rFdSet.Set(fd)
+
+	for {
+		n, err := unix.Select(fd+1, rFdSet, nil, nil, nil)
+		if err == unix.EINTR {
+			t.Log("Select interrupted")
+			continue
+		} else if err != nil {
+			t.Fatalf("Select: %v", err)
+		}
+		if n != 1 {
+			t.Fatalf("Select: got %v ready file descriptors, expected 1", n)
+		}
+		break
+	}
+}
+
 func TestGetwd(t *testing.T) {
 	fd, err := os.Open(".")
 	if err != nil {
@@ -524,7 +606,7 @@ func TestGetwd(t *testing.T) {
 	switch runtime.GOOS {
 	case "android":
 		dirs = []string{"/", "/system/bin"}
-	case "darwin":
+	case "darwin", "ios":
 		switch runtime.GOARCH {
 		case "arm", "arm64":
 			d1, err := ioutil.TempDir("", "d1")
@@ -574,6 +656,27 @@ func TestGetwd(t *testing.T) {
 	}
 }
 
+func compareStat_t(t *testing.T, otherStat string, st1, st2 *unix.Stat_t) {
+	if st2.Dev != st1.Dev {
+		t.Errorf("%s/Fstatat: got dev %v, expected %v", otherStat, st2.Dev, st1.Dev)
+	}
+	if st2.Ino != st1.Ino {
+		t.Errorf("%s/Fstatat: got ino %v, expected %v", otherStat, st2.Ino, st1.Ino)
+	}
+	if st2.Mode != st1.Mode {
+		t.Errorf("%s/Fstatat: got mode %v, expected %v", otherStat, st2.Mode, st1.Mode)
+	}
+	if st2.Uid != st1.Uid {
+		t.Errorf("%s/Fstatat: got uid %v, expected %v", otherStat, st2.Uid, st1.Uid)
+	}
+	if st2.Gid != st1.Gid {
+		t.Errorf("%s/Fstatat: got gid %v, expected %v", otherStat, st2.Gid, st1.Gid)
+	}
+	if st2.Size != st1.Size {
+		t.Errorf("%s/Fstatat: got size %v, expected %v", otherStat, st2.Size, st1.Size)
+	}
+}
+
 func TestFstatat(t *testing.T) {
 	defer chtmpdir(t)()
 
@@ -591,9 +694,7 @@ func TestFstatat(t *testing.T) {
 		t.Fatalf("Fstatat: %v", err)
 	}
 
-	if st1 != st2 {
-		t.Errorf("Fstatat: returned stat does not match Stat")
-	}
+	compareStat_t(t, "Stat", &st1, &st2)
 
 	err = os.Symlink("file1", "symlink1")
 	if err != nil {
@@ -610,9 +711,7 @@ func TestFstatat(t *testing.T) {
 		t.Fatalf("Fstatat: %v", err)
 	}
 
-	if st1 != st2 {
-		t.Errorf("Fstatat: returned stat does not match Lstat")
-	}
+	compareStat_t(t, "Lstat", &st1, &st2)
 }
 
 func TestFchmodat(t *testing.T) {
@@ -703,6 +802,45 @@ func TestRenameat(t *testing.T) {
 	_, err = os.Stat(from)
 	if err == nil {
 		t.Errorf("Renameat: stat of renamed file %q unexpectedly succeeded", from)
+	}
+}
+
+func TestUtimesNanoAt(t *testing.T) {
+	defer chtmpdir(t)()
+
+	symlink := "symlink1"
+	os.Remove(symlink)
+	err := os.Symlink("nonexisting", symlink)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Some filesystems only support microsecond resolution. Account for
+	// that in Nsec.
+	ts := []unix.Timespec{
+		{Sec: 1111, Nsec: 2000},
+		{Sec: 3333, Nsec: 4000},
+	}
+	err = unix.UtimesNanoAt(unix.AT_FDCWD, symlink, ts, unix.AT_SYMLINK_NOFOLLOW)
+	if err != nil {
+		t.Fatalf("UtimesNanoAt: %v", err)
+	}
+
+	var st unix.Stat_t
+	err = unix.Lstat(symlink, &st)
+	if err != nil {
+		t.Fatalf("Lstat: %v", err)
+	}
+
+	// Only check Mtim, Atim might not be supported by the underlying filesystem
+	expected := ts[1]
+	if st.Mtim.Nsec == 0 {
+		// Some filesystems only support 1-second time stamp resolution
+		// and will always set Nsec to 0.
+		expected.Nsec = 0
+	}
+	if st.Mtim != expected {
+		t.Errorf("UtimesNanoAt: wrong mtime: got %v, expected %v", st.Mtim, expected)
 	}
 }
 

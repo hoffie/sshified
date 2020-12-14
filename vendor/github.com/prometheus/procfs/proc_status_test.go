@@ -33,7 +33,8 @@ func TestProcStatus(t *testing.T) {
 		want int
 		have int
 	}{
-		{name: "pid", want: 26231, have: s.PID},
+		{name: "Pid", want: 26231, have: s.PID},
+		{name: "Tgid", want: 26231, have: s.TGID},
 		{name: "VmPeak", want: 58472 * 1024, have: int(s.VmPeak)},
 		{name: "VmSize", want: 58440 * 1024, have: int(s.VmSize)},
 		{name: "VmLck", want: 0 * 1024, have: int(s.VmLck)},
@@ -72,5 +73,37 @@ func TestProcStatusName(t *testing.T) {
 	}
 	if want, have := "prometheus", s.Name; want != have {
 		t.Errorf("want name %s, have %s", want, have)
+	}
+}
+
+func TestProcStatusUIDs(t *testing.T) {
+	p, err := getProcFixtures(t).Proc(26231)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := p.NewStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if want, have := [4]string{"1000", "1000", "1000", "0"}, s.UIDs; want != have {
+		t.Errorf("want uids %s, have %s", want, have)
+	}
+}
+
+func TestProcStatusGIDs(t *testing.T) {
+	p, err := getProcFixtures(t).Proc(26231)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := p.NewStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if want, have := [4]string{"1001", "1001", "1001", "0"}, s.GIDs; want != have {
+		t.Errorf("want uids %s, have %s", want, have)
 	}
 }

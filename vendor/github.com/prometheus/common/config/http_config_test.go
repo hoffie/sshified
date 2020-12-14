@@ -97,7 +97,6 @@ func newTestServer(handler func(w http.ResponseWriter, r *http.Request)) (*httpt
 		ClientAuth:   tls.RequireAndVerifyClientCert,
 		ClientCAs:    rootCAs}
 	testServer.TLS.Certificates[0] = serverCertificate
-	testServer.TLS.BuildNameToCertificate()
 
 	testServer.StartTLS()
 
@@ -206,7 +205,7 @@ func TestNewClientFromConfig(t *testing.T) {
 		}
 		defer testServer.Close()
 
-		client, err := NewClientFromConfig(validConfig.clientConfig, "test")
+		client, err := NewClientFromConfig(validConfig.clientConfig, "test", false, true)
 		if err != nil {
 			t.Errorf("Can't create a client from this config: %+v", validConfig.clientConfig)
 			continue
@@ -256,7 +255,7 @@ func TestNewClientFromInvalidConfig(t *testing.T) {
 	}
 
 	for _, invalidConfig := range newClientInvalidConfig {
-		client, err := NewClientFromConfig(invalidConfig.clientConfig, "test")
+		client, err := NewClientFromConfig(invalidConfig.clientConfig, "test", false, true)
 		if client != nil {
 			t.Errorf("A client instance was returned instead of nil using this config: %+v", invalidConfig.clientConfig)
 		}
@@ -295,7 +294,7 @@ func TestMissingBearerAuthFile(t *testing.T) {
 	}
 	defer testServer.Close()
 
-	client, err := NewClientFromConfig(cfg, "test")
+	client, err := NewClientFromConfig(cfg, "test", false, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,13 +326,19 @@ func TestBearerAuthRoundTripper(t *testing.T) {
 	bearerAuthRoundTripper := NewBearerAuthRoundTripper(BearerToken, fakeRoundTripper)
 	request, _ := http.NewRequest("GET", "/hitchhiker", nil)
 	request.Header.Set("User-Agent", "Douglas Adams mind")
-	bearerAuthRoundTripper.RoundTrip(request)
+	_, err := bearerAuthRoundTripper.RoundTrip(request)
+	if err != nil {
+		t.Errorf("unexpected error while executing RoundTrip: %s", err.Error())
+	}
 
 	// Should honor already Authorization header set.
 	bearerAuthRoundTripperShouldNotModifyExistingAuthorization := NewBearerAuthRoundTripper(newBearerToken, fakeRoundTripper)
 	request, _ = http.NewRequest("GET", "/hitchhiker", nil)
 	request.Header.Set("Authorization", ExpectedBearer)
-	bearerAuthRoundTripperShouldNotModifyExistingAuthorization.RoundTrip(request)
+	_, err = bearerAuthRoundTripperShouldNotModifyExistingAuthorization.RoundTrip(request)
+	if err != nil {
+		t.Errorf("unexpected error while executing RoundTrip: %s", err.Error())
+	}
 }
 
 func TestBearerAuthFileRoundTripper(t *testing.T) {
@@ -349,13 +354,19 @@ func TestBearerAuthFileRoundTripper(t *testing.T) {
 	bearerAuthRoundTripper := NewBearerAuthFileRoundTripper(BearerTokenFile, fakeRoundTripper)
 	request, _ := http.NewRequest("GET", "/hitchhiker", nil)
 	request.Header.Set("User-Agent", "Douglas Adams mind")
-	bearerAuthRoundTripper.RoundTrip(request)
+	_, err := bearerAuthRoundTripper.RoundTrip(request)
+	if err != nil {
+		t.Errorf("unexpected error while executing RoundTrip: %s", err.Error())
+	}
 
 	// Should honor already Authorization header set.
 	bearerAuthRoundTripperShouldNotModifyExistingAuthorization := NewBearerAuthFileRoundTripper(MissingBearerTokenFile, fakeRoundTripper)
 	request, _ = http.NewRequest("GET", "/hitchhiker", nil)
 	request.Header.Set("Authorization", ExpectedBearer)
-	bearerAuthRoundTripperShouldNotModifyExistingAuthorization.RoundTrip(request)
+	_, err = bearerAuthRoundTripperShouldNotModifyExistingAuthorization.RoundTrip(request)
+	if err != nil {
+		t.Errorf("unexpected error while executing RoundTrip: %s", err.Error())
+	}
 }
 
 func TestTLSConfig(t *testing.T) {
@@ -472,7 +483,7 @@ func TestBasicAuthNoPassword(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error loading HTTP client config: %v", err)
 	}
-	client, err := NewClientFromConfig(*cfg, "test")
+	client, err := NewClientFromConfig(*cfg, "test", false, true)
 	if err != nil {
 		t.Fatalf("Error creating HTTP Client: %v", err)
 	}
@@ -498,7 +509,7 @@ func TestBasicAuthNoUsername(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error loading HTTP client config: %v", err)
 	}
-	client, err := NewClientFromConfig(*cfg, "test")
+	client, err := NewClientFromConfig(*cfg, "test", false, true)
 	if err != nil {
 		t.Fatalf("Error creating HTTP Client: %v", err)
 	}
@@ -524,7 +535,7 @@ func TestBasicAuthPasswordFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error loading HTTP client config: %v", err)
 	}
-	client, err := NewClientFromConfig(*cfg, "test")
+	client, err := NewClientFromConfig(*cfg, "test", false, true)
 	if err != nil {
 		t.Fatalf("Error creating HTTP Client: %v", err)
 	}
@@ -675,7 +686,7 @@ func TestTLSRoundTripper(t *testing.T) {
 			writeCertificate(bs, tc.cert, cert)
 			writeCertificate(bs, tc.key, key)
 			if c == nil {
-				c, err = NewClientFromConfig(cfg, "test")
+				c, err = NewClientFromConfig(cfg, "test", false, true)
 				if err != nil {
 					t.Fatalf("Error creating HTTP Client: %v", err)
 				}
@@ -747,7 +758,7 @@ func TestTLSRoundTripperRaces(t *testing.T) {
 	writeCertificate(bs, TLSCAChainPath, ca)
 	writeCertificate(bs, ClientCertificatePath, cert)
 	writeCertificate(bs, ClientKeyNoPassPath, key)
-	c, err = NewClientFromConfig(cfg, "test")
+	c, err = NewClientFromConfig(cfg, "test", false, true)
 	if err != nil {
 		t.Fatalf("Error creating HTTP Client: %v", err)
 	}

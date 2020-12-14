@@ -17,6 +17,7 @@ import (
 	"unicode/utf16"
 	"unsafe"
 
+	"golang.org/x/sys/internal/unsafeheader"
 	"golang.org/x/sys/windows"
 )
 
@@ -73,7 +74,7 @@ func (m *Mgr) LockStatus() (*LockStatus, error) {
 		status := &LockStatus{
 			IsLocked: lockStatus.IsLocked != 0,
 			Age:      time.Duration(lockStatus.LockDuration) * time.Second,
-			Owner:    windows.UTF16ToString((*[(1 << 30) - 1]uint16)(unsafe.Pointer(lockStatus.LockOwner))[:]),
+			Owner:    windows.UTF16PtrToString(lockStatus.LockOwner),
 		}
 		return status, nil
 	}
@@ -116,9 +117,6 @@ func (m *Mgr) CreateService(name, exepath string, c Config, args ...string) (*Se
 	if c.StartType == 0 {
 		c.StartType = StartManual
 	}
-	if c.ErrorControl == 0 {
-		c.ErrorControl = ErrorNormal
-	}
 	if c.ServiceType == 0 {
 		c.ServiceType = windows.SERVICE_WIN32_OWN_PROCESS
 	}
@@ -137,7 +135,7 @@ func (m *Mgr) CreateService(name, exepath string, c Config, args ...string) (*Se
 		err = updateSidType(h, c.SidType)
 		if err != nil {
 			windows.DeleteService(h)
-			windows.CloseHandle(h)
+			windows.CloseServiceHandle(h)
 			return nil, err
 		}
 	}
@@ -145,7 +143,15 @@ func (m *Mgr) CreateService(name, exepath string, c Config, args ...string) (*Se
 		err = updateDescription(h, c.Description)
 		if err != nil {
 			windows.DeleteService(h)
-			windows.CloseHandle(h)
+			windows.CloseServiceHandle(h)
+			return nil, err
+		}
+	}
+	if c.DelayedAutoStart {
+		err = updateStartUp(h, c.DelayedAutoStart)
+		if err != nil {
+			windows.DeleteService(h)
+			windows.CloseServiceHandle(h)
 			return nil, err
 		}
 	}
@@ -193,10 +199,16 @@ func (m *Mgr) ListServices() ([]string, error) {
 	if servicesReturned == 0 {
 		return nil, nil
 	}
-	services := (*[1 << 20]windows.ENUM_SERVICE_STATUS_PROCESS)(unsafe.Pointer(&buf[0]))[:servicesReturned]
+
+	var services []windows.ENUM_SERVICE_STATUS_PROCESS
+	hdr := (*unsafeheader.Slice)(unsafe.Pointer(&services))
+	hdr.Data = unsafe.Pointer(&buf[0])
+	hdr.Len = int(servicesReturned)
+	hdr.Cap = int(servicesReturned)
+
 	var names []string
 	for _, s := range services {
-		name := syscall.UTF16ToString((*[1 << 20]uint16)(unsafe.Pointer(s.ServiceName))[:])
+		name := windows.UTF16PtrToString(s.ServiceName)
 		names = append(names, name)
 	}
 	return names, nil

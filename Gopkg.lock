@@ -3,91 +3,193 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:a7f619ffc7b99687f9444bd0a07509fec8ae708a7175d234878129896c0918a8"
   name = "github.com/alecthomas/template"
-  packages = [".","parse"]
-  revision = "a0175ee3bccc567396460bf5acd36800cb10c49c"
+  packages = [
+    ".",
+    "parse",
+  ]
+  pruneopts = ""
+  revision = "fb15b899a75114aa79cc930e33c46b577cc664b1"
 
 [[projects]]
   branch = "master"
+  digest = "1:8dad3d267b71e44e8eabbc458563eec6cae6f5f9b9c636db91717a3a3a57285c"
   name = "github.com/alecthomas/units"
   packages = ["."]
-  revision = "2efee857e7cfd4f3d0138cc3cbb1b4966962b93a"
+  pruneopts = ""
+  revision = "1786d5ef83d4868925e518b2995c30430aec0f06"
 
 [[projects]]
+  digest = "1:ac2a05be7167c495fe8aaf8aaf62ecf81e78d2180ecb04e16778dc6c185c96a5"
   name = "github.com/beorn7/perks"
   packages = ["quantile"]
-  revision = "4b2b341e8d7715fae06375aa633dbb6e91b3fb46"
-  version = "v1.0.0"
+  pruneopts = ""
+  revision = "37c8de3658fcb183f997c4e13e8337516ab753e6"
+  version = "v1.0.1"
 
 [[projects]]
+  digest = "1:6532affeeaaccdc6919d5773516176b77de02b4af8cf9a7fac16bae77aa319c5"
   name = "github.com/golang/protobuf"
-  packages = ["proto"]
-  revision = "b5d812f8a3706043e23a9cd5babf2e5423744d30"
-  version = "v1.3.1"
+  packages = [
+    "proto",
+    "ptypes",
+    "ptypes/any",
+    "ptypes/duration",
+    "ptypes/timestamp",
+  ]
+  pruneopts = ""
+  revision = "4846b58453b3708320bdb524f25cc5a1d9cda4d4"
+  version = "v1.4.3"
 
 [[projects]]
-  name = "github.com/konsorten/go-windows-terminal-sequences"
-  packages = ["."]
-  revision = "f55edac94c9bbba5d6182a4be46d86a2c9b5b50e"
-  version = "v1.0.2"
-
-[[projects]]
+  digest = "1:63722a4b1e1717be7b98fc686e0b30d5e7f734b9e93d7dee86293b6deab7ea28"
   name = "github.com/matttproud/golang_protobuf_extensions"
   packages = ["pbutil"]
+  pruneopts = ""
   revision = "c12348ce28de40eed0136aa2b644d0ee0650e56c"
   version = "v1.0.1"
 
 [[projects]]
+  digest = "1:c826496cad27bd9a7644a01230a79d472b4093dd33587236e8f8369bb1d8534e"
   name = "github.com/prometheus/client_golang"
-  packages = ["prometheus","prometheus/internal","prometheus/promhttp"]
+  packages = [
+    "prometheus",
+    "prometheus/internal",
+    "prometheus/promhttp",
+  ]
+  pruneopts = ""
   revision = "2641b987480bca71fb39738eb8c8b0d577cb1d76"
   version = "v0.9.4"
 
 [[projects]]
-  branch = "master"
+  digest = "1:ade2df4d865299d2b042955eb4fdd9d60698b26cf3da10f1138a9bfefe9cd2c6"
   name = "github.com/prometheus/client_model"
   packages = ["go"]
-  revision = "fd36f4220a901265f90734c3183c5f0c91daa0b8"
+  pruneopts = ""
+  revision = "7bc5445566f0fe75b15de23e6b93886e982d7bf9"
+  version = "v0.2.0"
 
 [[projects]]
+  digest = "1:7c55e3458cd4712634ca29163fd9bc7962a3dc9c361f58aa024cf422ce4a44dd"
   name = "github.com/prometheus/common"
-  packages = ["expfmt","internal/bitbucket.org/ww/goautoneg","model"]
-  revision = "17f5ca1748182ddf24fc33a5a7caaaf790a52fcc"
-  version = "v0.4.1"
+  packages = [
+    "expfmt",
+    "internal/bitbucket.org/ww/goautoneg",
+    "model",
+  ]
+  pruneopts = ""
+  revision = "20c99e7aa07352b599bd0517cd5ca945f4af0407"
+  version = "v0.15.0"
 
 [[projects]]
+  digest = "1:d8ac5f1592931167d0e3fd8c6d81d62d2abfdde6d84dc0f21f00ddfbab753395"
   name = "github.com/prometheus/procfs"
-  packages = [".","internal/fs"]
-  revision = "833678b5bb319f2d20a475cb165c6cc59c2cc77c"
-  version = "v0.0.2"
+  packages = [
+    ".",
+    "internal/fs",
+    "internal/util",
+  ]
+  pruneopts = ""
+  revision = "9dece15c53cd5e9fbfbd72d5108adcf526a3f486"
+  version = "v0.2.0"
 
 [[projects]]
+  digest = "1:2f8f9b60ebe029a83f92a7549926145eb6014c01d256946058a5a8768efd4522"
   name = "github.com/sirupsen/logrus"
   packages = ["."]
-  revision = "839c75faf7f98a33d445d181f3018b5c3409a45e"
-  version = "v1.4.2"
+  pruneopts = ""
+  revision = "6699a89a232f3db797f2e280639854bbc4b89725"
+  version = "v1.7.0"
 
 [[projects]]
   branch = "master"
+  digest = "1:f74c0976313d2d7055c7948741e6bab73f6e26a13d98e55114b49e4761205f59"
   name = "golang.org/x/crypto"
-  packages = ["curve25519","ed25519","ed25519/internal/edwards25519","internal/chacha20","internal/subtle","poly1305","ssh","ssh/knownhosts"]
-  revision = "5c40567a22f818bd14a1ea7245dad9f8ef0691aa"
+  packages = [
+    "blowfish",
+    "chacha20",
+    "curve25519",
+    "ed25519",
+    "ed25519/internal/edwards25519",
+    "internal/subtle",
+    "poly1305",
+    "ssh",
+    "ssh/internal/bcrypt_pbkdf",
+    "ssh/knownhosts",
+  ]
+  pruneopts = ""
+  revision = "5f87f3452ae96c4850ab9af7783f2517b643061b"
 
 [[projects]]
   branch = "master"
+  digest = "1:f5fa77ac831c2dd64f143d8f310511d461231f76aa52424fd83682c902e0860b"
   name = "golang.org/x/sys"
-  packages = ["cpu","unix"]
-  revision = "15dcb6c0061f497a3f66e3ea034b629c6dd4d99e"
+  packages = [
+    "cpu",
+    "internal/unsafeheader",
+    "unix",
+    "windows",
+  ]
+  pruneopts = ""
+  revision = "aec9a390925b9feece6a6e9b19bdaf177e084ed4"
 
 [[projects]]
+  digest = "1:0d049ff01749ce1d6092c85cb90a02dfdb3b401939b13415b7e608f36bc8ecee"
+  name = "google.golang.org/protobuf"
+  packages = [
+    "encoding/prototext",
+    "encoding/protowire",
+    "internal/descfmt",
+    "internal/descopts",
+    "internal/detrand",
+    "internal/encoding/defval",
+    "internal/encoding/messageset",
+    "internal/encoding/tag",
+    "internal/encoding/text",
+    "internal/errors",
+    "internal/fieldsort",
+    "internal/filedesc",
+    "internal/filetype",
+    "internal/flags",
+    "internal/genid",
+    "internal/impl",
+    "internal/mapsort",
+    "internal/pragma",
+    "internal/set",
+    "internal/strs",
+    "internal/version",
+    "proto",
+    "reflect/protoreflect",
+    "reflect/protoregistry",
+    "runtime/protoiface",
+    "runtime/protoimpl",
+    "types/known/anypb",
+    "types/known/durationpb",
+    "types/known/timestamppb",
+  ]
+  pruneopts = ""
+  revision = "3f7a61f89bb6813f89d981d1870ed68da0b3c3f1"
+  version = "v1.25.0"
+
+[[projects]]
+  digest = "1:15d017551627c8bb091bde628215b2861bed128855343fdd570c62d08871f6e1"
   name = "gopkg.in/alecthomas/kingpin.v2"
   packages = ["."]
+  pruneopts = ""
   revision = "947dcec5ba9c011838740e680966fd7087a71d0d"
   version = "v2.2.6"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "fbb57efa38071a504cc5c58920909b52640bb636b948b039245cb35ab226baea"
+  input-imports = [
+    "github.com/prometheus/client_golang/prometheus",
+    "github.com/prometheus/client_golang/prometheus/promhttp",
+    "github.com/sirupsen/logrus",
+    "golang.org/x/crypto/ssh",
+    "golang.org/x/crypto/ssh/knownhosts",
+    "gopkg.in/alecthomas/kingpin.v2",
+  ]
   solver-name = "gps-cdcl"
   solver-version = 1

@@ -5,13 +5,18 @@
 package windows_test
 
 import (
+	"debug/pe"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"syscall"
 	"testing"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -98,12 +103,8 @@ func TestCreateWellKnownSid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to create well known sid for administrators: %v", err)
 	}
-	sidStr, err := sid.String()
-	if err != nil {
-		t.Fatalf("Unable to convert sid into string: %v", err)
-	}
-	if sidStr != "S-1-5-32-544" {
-		t.Fatalf("Expecting administrators to be S-1-5-32-544, but found %s instead", sidStr)
+	if got, want := sid.String(), "S-1-5-32-544"; got != want {
+		t.Fatalf("Builtin Administrators SID = %s, want %s", got, want)
 	}
 }
 
@@ -214,5 +215,274 @@ func TestKnownFolderPath(t *testing.T) {
 	}
 	if want != got {
 		t.Fatalf("Path = %q; want %q", got, want)
+	}
+}
+
+func TestRtlGetVersion(t *testing.T) {
+	version := windows.RtlGetVersion()
+	major, minor, build := windows.RtlGetNtVersionNumbers()
+	// Go is not explictly added to the application compatibility database, so
+	// these two functions should return the same thing.
+	if version.MajorVersion != major || version.MinorVersion != minor || version.BuildNumber != build {
+		t.Fatalf("%d.%d.%d != %d.%d.%d", version.MajorVersion, version.MinorVersion, version.BuildNumber, major, minor, build)
+	}
+}
+
+func TestGetNamedSecurityInfo(t *testing.T) {
+	path, err := windows.GetSystemDirectory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sd, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sd.IsValid() {
+		t.Fatal("Invalid security descriptor")
+	}
+	sdOwner, _, err := sd.Owner()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sdOwner.IsValid() {
+		t.Fatal("Invalid security descriptor owner")
+	}
+}
+
+func TestGetSecurityInfo(t *testing.T) {
+	sd, err := windows.GetSecurityInfo(windows.CurrentProcess(), windows.SE_KERNEL_OBJECT, windows.DACL_SECURITY_INFORMATION)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sd.IsValid() {
+		t.Fatal("Invalid security descriptor")
+	}
+	sdStr := sd.String()
+	if !strings.HasPrefix(sdStr, "D:(A;") {
+		t.Fatalf("DACL = %q; want D:(A;...", sdStr)
+	}
+}
+
+func TestSddlConversion(t *testing.T) {
+	sd, err := windows.SecurityDescriptorFromString("O:BA")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sd.IsValid() {
+		t.Fatal("Invalid security descriptor")
+	}
+	sdOwner, _, err := sd.Owner()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sdOwner.IsValid() {
+		t.Fatal("Invalid security descriptor owner")
+	}
+	if !sdOwner.IsWellKnown(windows.WinBuiltinAdministratorsSid) {
+		t.Fatalf("Owner = %q; want S-1-5-32-544", sdOwner)
+	}
+}
+
+func TestBuildSecurityDescriptor(t *testing.T) {
+	const want = "O:SYD:(A;;GA;;;BA)"
+
+	adminSid, err := windows.CreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	systemSid, err := windows.CreateWellKnownSid(windows.WinLocalSystemSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	access := []windows.EXPLICIT_ACCESS{{
+		AccessPermissions: windows.GENERIC_ALL,
+		AccessMode:        windows.GRANT_ACCESS,
+		Trustee: windows.TRUSTEE{
+			TrusteeForm:  windows.TRUSTEE_IS_SID,
+			TrusteeType:  windows.TRUSTEE_IS_GROUP,
+			TrusteeValue: windows.TrusteeValueFromSID(adminSid),
+		},
+	}}
+	owner := &windows.TRUSTEE{
+		TrusteeForm:  windows.TRUSTEE_IS_SID,
+		TrusteeType:  windows.TRUSTEE_IS_USER,
+		TrusteeValue: windows.TrusteeValueFromSID(systemSid),
+	}
+
+	sd, err := windows.BuildSecurityDescriptor(owner, nil, access, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sd, err = sd.ToAbsolute()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = sd.SetSACL(nil, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := sd.String(); got != want {
+		t.Fatalf("SD = %q; want %q", got, want)
+	}
+	sd, err = sd.ToSelfRelative()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := sd.String(); got != want {
+		t.Fatalf("SD = %q; want %q", got, want)
+	}
+
+	sd, err = windows.NewSecurityDescriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	acl, err := windows.ACLFromEntries(access, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = sd.SetDACL(acl, true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = sd.SetOwner(systemSid, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := sd.String(); got != want {
+		t.Fatalf("SD = %q; want %q", got, want)
+	}
+	sd, err = sd.ToSelfRelative()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := sd.String(); got != want {
+		t.Fatalf("SD = %q; want %q", got, want)
+	}
+}
+
+func TestGetDiskFreeSpaceEx(t *testing.T) {
+	cwd, err := windows.UTF16PtrFromString(".")
+	if err != nil {
+		t.Fatalf(`failed to call UTF16PtrFromString("."): %v`, err)
+	}
+	var freeBytesAvailableToCaller, totalNumberOfBytes, totalNumberOfFreeBytes uint64
+	if err := windows.GetDiskFreeSpaceEx(cwd, &freeBytesAvailableToCaller, &totalNumberOfBytes, &totalNumberOfFreeBytes); err != nil {
+		t.Fatalf("failed to call GetDiskFreeSpaceEx: %v", err)
+	}
+
+	if freeBytesAvailableToCaller == 0 {
+		t.Errorf("freeBytesAvailableToCaller: got 0; want > 0")
+	}
+	if totalNumberOfBytes == 0 {
+		t.Errorf("totalNumberOfBytes: got 0; want > 0")
+	}
+	if totalNumberOfFreeBytes == 0 {
+		t.Errorf("totalNumberOfFreeBytes: got 0; want > 0")
+	}
+}
+
+func TestGetPreferredUILanguages(t *testing.T) {
+	tab := map[string]func(flags uint32) ([]string, error){
+		"GetProcessPreferredUILanguages": windows.GetProcessPreferredUILanguages,
+		"GetThreadPreferredUILanguages":  windows.GetThreadPreferredUILanguages,
+		"GetUserPreferredUILanguages":    windows.GetUserPreferredUILanguages,
+		"GetSystemPreferredUILanguages":  windows.GetSystemPreferredUILanguages,
+	}
+	for fName, f := range tab {
+		lang, err := f(windows.MUI_LANGUAGE_ID)
+		if err != nil {
+			t.Errorf(`failed to call %v(MUI_LANGUAGE_ID): %v`, fName, err)
+		}
+		for _, l := range lang {
+			_, err := strconv.ParseUint(l, 16, 16)
+			if err != nil {
+				t.Errorf(`%v(MUI_LANGUAGE_ID) returned unexpected LANGID: %v`, fName, l)
+			}
+		}
+
+		lang, err = f(windows.MUI_LANGUAGE_NAME)
+		if err != nil {
+			t.Errorf(`failed to call %v(MUI_LANGUAGE_NAME): %v`, fName, err)
+		}
+	}
+}
+
+func TestProcessWorkingSetSizeEx(t *testing.T) {
+	// Grab a handle to the current process
+	hProcess := windows.CurrentProcess()
+
+	// Allocate memory to store the result of the query
+	var minimumWorkingSetSize, maximumWorkingSetSize uintptr
+
+	// Make the system-call
+	var flag uint32
+	windows.GetProcessWorkingSetSizeEx(hProcess, &minimumWorkingSetSize, &maximumWorkingSetSize, &flag)
+
+	// Set the new limits to the current ones
+	if err := windows.SetProcessWorkingSetSizeEx(hProcess, minimumWorkingSetSize, maximumWorkingSetSize, flag); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestJobObjectInfo(t *testing.T) {
+	jo, err := windows.CreateJobObject(nil, nil)
+	if err != nil {
+		t.Fatalf("CreateJobObject failed: %v", err)
+	}
+	defer windows.CloseHandle(jo)
+
+	var info windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+
+	err = windows.QueryInformationJobObject(jo, windows.JobObjectExtendedLimitInformation,
+		uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info)), nil)
+	if err != nil {
+		t.Fatalf("QueryInformationJobObject failed: %v", err)
+	}
+
+	const wantMemLimit = 4 * 1024
+
+	info.BasicLimitInformation.LimitFlags |= windows.JOB_OBJECT_LIMIT_PROCESS_MEMORY
+	info.ProcessMemoryLimit = wantMemLimit
+	_, err = windows.SetInformationJobObject(jo, windows.JobObjectExtendedLimitInformation,
+		uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info)))
+	if err != nil {
+		t.Fatalf("SetInformationJobObject failed: %v", err)
+	}
+
+	err = windows.QueryInformationJobObject(jo, windows.JobObjectExtendedLimitInformation,
+		uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info)), nil)
+	if err != nil {
+		t.Fatalf("QueryInformationJobObject failed: %v", err)
+	}
+
+	if have := info.ProcessMemoryLimit; wantMemLimit != have {
+		t.Errorf("ProcessMemoryLimit is wrong: want %v have %v", wantMemLimit, have)
+	}
+}
+
+func TestIsWow64Process2(t *testing.T) {
+	var processMachine, nativeMachine uint16
+	err := windows.IsWow64Process2(windows.CurrentProcess(), &processMachine, &nativeMachine)
+	if errors.Is(err, windows.ERROR_PROC_NOT_FOUND) {
+		maj, min, build := windows.RtlGetNtVersionNumbers()
+		if maj < 10 || (maj == 10 && min == 0 && build < 17763) {
+			t.Skip("not available on older versions of Windows")
+			return
+		}
+	}
+	if err != nil {
+		t.Fatalf("IsWow64Process2 failed: %v", err)
+	}
+	if processMachine == pe.IMAGE_FILE_MACHINE_UNKNOWN {
+		processMachine = nativeMachine
+	}
+	switch {
+	case processMachine == pe.IMAGE_FILE_MACHINE_AMD64 && runtime.GOARCH == "amd64":
+	case processMachine == pe.IMAGE_FILE_MACHINE_I386 && runtime.GOARCH == "386":
+	case processMachine == pe.IMAGE_FILE_MACHINE_ARMNT && runtime.GOARCH == "arm":
+	case processMachine == pe.IMAGE_FILE_MACHINE_ARM64 && runtime.GOARCH == "arm64":
+	default:
+		t.Errorf("IsWow64Process2 is wrong: want %v have %v", runtime.GOARCH, processMachine)
 	}
 }
