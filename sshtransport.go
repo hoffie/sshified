@@ -28,14 +28,15 @@ func makePubkeyAuth(keyFile string) ([]ssh.AuthMethod, error) {
 }
 
 type sshTransport struct {
-	port           int
-	user           string
-	clientConfig   *ssh.ClientConfig
-	sshClientPool  *sshClientPool
-	Transport      http.RoundTripper
-	keyFile        string
-	knownHostsFile string
-	nextProxyAddr  string
+	port               int
+	user               string
+	auth               []ssh.AuthMethod
+	sshClientPool      *sshClientPool
+	Transport          http.RoundTripper
+	keyFile            string
+	knownHostsFile     string
+	knownHostsCallback ssh.HostKeyCallback
+	nextProxyAddr      string
 }
 
 func NewSSHTransport(user, keyFile, knownHostsFile string, port int, nextProxyAddr string) (*sshTransport, error) {
@@ -60,16 +61,12 @@ func (t *sshTransport) LoadFiles() error {
 	if err != nil {
 		return fmt.Errorf("failed to load private key file: %s", err)
 	}
-	knownHosts, err := knownhosts.New(t.knownHostsFile)
+	t.auth = auth
+	knownHostsCallback, err := knownhosts.New(t.knownHostsFile)
 	if err != nil {
 		return fmt.Errorf("failed to load known hosts: %s", err)
 	}
-	t.clientConfig = &ssh.ClientConfig{
-		User:            t.user,
-		Auth:            auth,
-		HostKeyCallback: knownHosts,
-		Timeout:         time.Duration(*timeout) * time.Second,
-	}
+	t.knownHostsCallback = knownHostsCallback
 	return nil
 }
 
@@ -129,15 +126,46 @@ func (t *sshTransport) dial(network, addr string) (net.Conn, error) {
 	return nil, err
 }
 
+// getHostkeyAlgosFor queries the knownhosts database for the given hostport with an invalid
+// key to match against. This generates an error whoch can be used to query for the
+// available key type algorithms.
+func (t *sshTransport) getHostkeyAlgosFor(hostport string) ([]string, error) {
+	placeholderAddr := &net.TCPAddr{IP: []byte{0, 0, 0, 0}}
+	var placeholderPubkey invalidPublicKey
+	var algos []string
+	var knownHostsLookupError *knownhosts.KeyError
+	if err := t.knownHostsCallback(hostport, placeholderAddr, &placeholderPubkey); errors.As(err, &knownHostsLookupError) {
+		for _, knownKey := range knownHostsLookupError.Want {
+			algos = append(algos, knownKey.Key.Type())
+		}
+	}
+	if len(algos) < 1 {
+		return []string{}, fmt.Errorf("no matching known hosts entry for %s", hostport)
+	}
+	return algos, nil
+}
+
 func (t *sshTransport) getSSHClient(host string) (*ssh.Client, error) {
 	client, cached := t.sshClientPool.get(host)
 	if cached {
 		log.WithFields(log.Fields{"host": host}).Trace("using cached ssh connection")
 		return client, nil
 	}
-	log.WithFields(log.Fields{"host": host}).Trace("building ssh connection")
 	sshAddr := fmt.Sprintf("%s:%d", host, t.port)
-	client, err := ssh.Dial("tcp", sshAddr, t.clientConfig)
+	knownHostAlgos, err := t.getHostkeyAlgosFor(sshAddr)
+	if err != nil {
+		return nil, err
+	}
+	upgradedHostKeyAlgos := upgradeHostKeyAlgos(knownHostAlgos)
+	log.WithFields(log.Fields{"host": host, "HostKeyAlgorithms": upgradedHostKeyAlgos}).Trace("building ssh connection")
+	clientConfig := &ssh.ClientConfig{
+		User:              t.user,
+		Auth:              t.auth,
+		HostKeyCallback:   t.knownHostsCallback,
+		HostKeyAlgorithms: upgradedHostKeyAlgos,
+		Timeout:           time.Duration(*timeout) * time.Second,
+	}
+	client, err = ssh.Dial("tcp", sshAddr, clientConfig)
 	if err == nil {
 		log.WithFields(log.Fields{"host": host}).Trace("caching successful ssh connection")
 		cachedClient, cached := t.sshClientPool.setOrGetCached(host, client)
@@ -152,4 +180,38 @@ func (t *sshTransport) getSSHClient(host string) (*ssh.Client, error) {
 		}
 	}
 	return client, err
+}
+
+// When reading known_host files we find key types such as ssh-rsa.
+// When talking to an SSH server, we need to advertise what keys we
+// can handle.
+// We should not advertise ssh-rsa here, as it is insecure and deprecated.
+// Instead, we should advertise the newer rsa-sha2-* methods
+// which work with the same key type.
+// Therefore, this function replaces ssh-rsa with rsa-sha2*.
+func upgradeHostKeyAlgos(algos []string) []string {
+	upgraded := []string{}
+	for _, algo := range algos {
+		if algo == "ssh-rsa" {
+			upgraded = append(upgraded, "rsa-sha2-512")
+			upgraded = append(upgraded, "rsa-sha2-256")
+			continue
+		}
+		upgraded = append(upgraded, algo)
+	}
+	return upgraded
+}
+
+type invalidPublicKey struct{}
+
+func (invalidPublicKey) Marshal() []byte {
+	return []byte("invalid public key")
+}
+
+func (invalidPublicKey) Type() string {
+	return "invalid public key"
+}
+
+func (invalidPublicKey) Verify(_ []byte, _ *ssh.Signature) error {
+	return errors.New("this key is never valid")
 }
