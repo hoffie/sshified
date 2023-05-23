@@ -1,3 +1,6 @@
+* v1.1.10
+  - Improve Host Key Algorithm choice by pre-scanning available known host key types. Previously, sshified was limited to using the first negotiated key type which could lead to failures if that type differs from the available known host key types.
+  - Update vendored dependencies
 * v1.1.9
   - Switch to go modules
   - Update vendored dependencies
