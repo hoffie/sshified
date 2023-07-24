@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -79,6 +80,7 @@ func (t *sshTransport) createTransport() {
 		IdleConnTimeout:       time.Duration(*timeout) * 2 * time.Second,
 		ResponseHeaderTimeout: time.Duration(*timeout) * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
+		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
 	}
 }
 

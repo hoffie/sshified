@@ -79,7 +79,20 @@ func (pr *proxyRequest) Handle() error {
 }
 
 func (pr *proxyRequest) buildURL() {
-	pr.origReq.URL.Scheme = "http"
+	https := pr.origReq.URL.Query().Get("__sshified_use_insecure_https")
+	if https == "" {
+		pr.origReq.URL.Scheme = "http"
+	} else {
+		// TLSClientConfig is hardcoded and re-used in sshtransport.go
+		pr.origReq.URL.Scheme = "https"
+		values := pr.origReq.URL.Query()
+		for k := range values {
+			if strings.HasPrefix(k, "__sshified_") {
+				values.Del(k)
+			}
+		}
+		pr.origReq.URL.RawQuery = values.Encode()
+	}
 	pr.origReq.URL.Host = pr.origReq.Host
 	pr.requestedURL = pr.origReq.URL.String()
 }
