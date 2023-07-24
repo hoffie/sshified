@@ -15,6 +15,7 @@ By pointing Prometheus to sshified, all traffic will be tunneled over SSH and ca
 
 ### Non-features
 Currently, no HTTPS (or general CONNECT) support is implemented or planned.
+Rudimentary non-validating HTTPS client support exists by using the special `?__sshified_use_insecure_https=1` query parameter.
 
 ## Status
 This project is considered feature-complete.
