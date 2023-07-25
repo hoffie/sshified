@@ -1,3 +1,6 @@
+* v1.1.12
+  - Add validating https support via `__sshified_use_https=1`
+  - Rename old `?__sshified_use_insecure_https=1` to `__sshified_https_insecure_skip_verify=1`
 * v1.1.11
   - Add non-validating https support via `?__sshified_use_insecure_https=1` URL parameter
   - Update vendored dependencies
