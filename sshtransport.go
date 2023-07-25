@@ -29,15 +29,16 @@ func makePubkeyAuth(keyFile string) ([]ssh.AuthMethod, error) {
 }
 
 type sshTransport struct {
-	port               int
-	user               string
-	auth               []ssh.AuthMethod
-	sshClientPool      *sshClientPool
-	Transport          http.RoundTripper
-	keyFile            string
-	knownHostsFile     string
-	knownHostsCallback ssh.HostKeyCallback
-	nextProxyAddr      string
+	port                   int
+	user                   string
+	auth                   []ssh.AuthMethod
+	sshClientPool          *sshClientPool
+	TransportRegular       http.RoundTripper
+	TransportTLSSkipVerify http.RoundTripper
+	keyFile                string
+	knownHostsFile         string
+	knownHostsCallback     ssh.HostKeyCallback
+	nextProxyAddr          string
 }
 
 func NewSSHTransport(user, keyFile, knownHostsFile string, port int, nextProxyAddr string) (*sshTransport, error) {
@@ -53,7 +54,7 @@ func NewSSHTransport(user, keyFile, knownHostsFile string, port int, nextProxyAd
 	if err != nil {
 		return nil, err
 	}
-	t.createTransport()
+	t.createTransports()
 	return t, nil
 }
 
@@ -71,8 +72,8 @@ func (t *sshTransport) LoadFiles() error {
 	return nil
 }
 
-func (t *sshTransport) createTransport() {
-	t.Transport = &http.Transport{
+func (t *sshTransport) createTransports() {
+	transportRegular := &http.Transport{
 		Proxy: nil,
 		Dial:  t.dial,
 		// FIXME: DialContext
@@ -80,8 +81,11 @@ func (t *sshTransport) createTransport() {
 		IdleConnTimeout:       time.Duration(*timeout) * 2 * time.Second,
 		ResponseHeaderTimeout: time.Duration(*timeout) * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
 	}
+	transportTLSSkipVerify := transportRegular.Clone()
+	transportTLSSkipVerify.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	t.TransportRegular = transportRegular
+	t.TransportTLSSkipVerify = transportTLSSkipVerify
 }
 
 func (t *sshTransport) checkHostKey(hostname string, remote net.Addr, key ssh.PublicKey) error {

@@ -13,9 +13,8 @@ You will need to configure your software to use sshified as an HTTP proxy.
 A popular use case is using the monitoring tool [Prometheus](https://prometheus.io).
 By pointing Prometheus to sshified, all traffic will be tunneled over SSH and can therefore be run over untrusted networks.
 
-### Non-features
-Currently, no HTTPS (or general CONNECT) support is implemented or planned.
-Rudimentary non-validating HTTPS client support exists by using the special `?__sshified_use_insecure_https=1` query parameter.
+Rudimentary HTTPS client support exists by using the special `?__sshified_use_https=1` parameter.
+If certificate validation against the system trust store should be disabled, use `&__sshified_https_insecure_skip_verify=1` as an additional query parameter.
 
 ## Status
 This project is considered feature-complete.

@@ -20,7 +20,7 @@ func NewProxyHandler(ssh *sshTransport) *proxyHandler {
 }
 
 func (ph *proxyHandler) ServeHTTP(rw http.ResponseWriter, origReq *http.Request) {
-	proxyReq := NewProxyRequest(rw, origReq, ph.ssh.Transport)
+	proxyReq := NewProxyRequest(rw, origReq, ph.ssh.TransportRegular, ph.ssh.TransportTLSSkipVerify)
 	err := proxyReq.Handle()
 	if err != nil {
 		log.WithFields(log.Fields{
@@ -33,20 +33,23 @@ func (ph *proxyHandler) ServeHTTP(rw http.ResponseWriter, origReq *http.Request)
 }
 
 type proxyRequest struct {
-	rw               http.ResponseWriter
-	origReq          *http.Request
-	transport        http.RoundTripper
-	requestedURL     string
-	upstreamClient   *http.Client
-	upstreamResponse *http.Response
-	upstreamRequest  *http.Request
+	rw                      http.ResponseWriter
+	origReq                 *http.Request
+	transportRegular        http.RoundTripper
+	transportTLSSkipVerify  http.RoundTripper
+	requestedURL            string
+	upstreamClient          *http.Client
+	upstreamResponse        *http.Response
+	upstreamRequest         *http.Request
+	httpsInsecureSkipVerify bool
 }
 
-func NewProxyRequest(rw http.ResponseWriter, origReq *http.Request, transport http.RoundTripper) *proxyRequest {
+func NewProxyRequest(rw http.ResponseWriter, origReq *http.Request, transportRegular, transportTLSSkipVerify http.RoundTripper) *proxyRequest {
 	return &proxyRequest{
-		rw:        rw,
-		origReq:   origReq,
-		transport: transport,
+		rw:                     rw,
+		origReq:                origReq,
+		transportRegular:       transportRegular,
+		transportTLSSkipVerify: transportTLSSkipVerify,
 	}
 }
 
@@ -79,13 +82,15 @@ func (pr *proxyRequest) Handle() error {
 }
 
 func (pr *proxyRequest) buildURL() {
-	https := pr.origReq.URL.Query().Get("__sshified_use_insecure_https")
+	https := pr.origReq.URL.Query().Get("__sshified_use_https")
 	if https == "" {
 		pr.origReq.URL.Scheme = "http"
 	} else {
-		// TLSClientConfig is hardcoded and re-used in sshtransport.go
 		pr.origReq.URL.Scheme = "https"
 		values := pr.origReq.URL.Query()
+		if values.Get("__sshified_https_insecure_skip_verify") == "1" {
+			pr.httpsInsecureSkipVerify = true
+		}
 		for k := range values {
 			if strings.HasPrefix(k, "__sshified_") {
 				values.Del(k)
@@ -119,8 +124,14 @@ func (pr *proxyRequest) buildRequest() error {
 		}
 	}
 	pr.upstreamRequest.Body = pr.origReq.Body
+	var transport http.RoundTripper
+	if pr.httpsInsecureSkipVerify {
+		transport = pr.transportTLSSkipVerify
+	} else {
+		transport = pr.transportRegular
+	}
 	pr.upstreamClient = &http.Client{
-		Transport: pr.transport,
+		Transport: transport,
 		Timeout:   time.Duration(*timeout) * time.Second,
 	}
 	return nil
