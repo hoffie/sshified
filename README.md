@@ -25,7 +25,7 @@ Synthetic tests can be run in order to prove stability.
 For more details, see [TESTING](TESTING.md).
 
 ## Build
-This tool is built using Go (tested with 1.9.2 or newer).
+This tool is built using Go (tested with 1.20 or newer).
 It makes use of some popular Go libraries, which have been vendored (using `dep`) to allow for reproducible builds and simplified cloning.
 
 `go get -u github.com/hoffie/sshified`
