@@ -41,7 +41,9 @@ func main() {
 	if err != nil {
 		log.WithFields(log.Fields{"err": err}).Fatal("failed to set up ssh config")
 	}
-	ph := NewProxyHandler(sshTransport)
+	// only enable HTTPS support at the last sshified instance in a cascading setup:
+	enableHTTPS := *nextProxyAddr == ""
+	ph := NewProxyHandler(sshTransport, enableHTTPS)
 	s := &http.Server{
 		Addr:           *proxyAddr,
 		Handler:        ph,

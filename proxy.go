@@ -12,15 +12,16 @@ import (
 )
 
 type proxyHandler struct {
-	ssh *sshTransport
+	ssh         *sshTransport
+	enableHTTPS bool
 }
 
-func NewProxyHandler(ssh *sshTransport) *proxyHandler {
-	return &proxyHandler{ssh: ssh}
+func NewProxyHandler(ssh *sshTransport, enableHTTPS bool) *proxyHandler {
+	return &proxyHandler{ssh: ssh, enableHTTPS: enableHTTPS}
 }
 
 func (ph *proxyHandler) ServeHTTP(rw http.ResponseWriter, origReq *http.Request) {
-	proxyReq := NewProxyRequest(rw, origReq, ph.ssh.TransportRegular, ph.ssh.TransportTLSSkipVerify)
+	proxyReq := NewProxyRequest(rw, origReq, ph.ssh.TransportRegular, ph.ssh.TransportTLSSkipVerify, ph.enableHTTPS)
 	err := proxyReq.Handle()
 	if err != nil {
 		log.WithFields(log.Fields{
@@ -41,15 +42,17 @@ type proxyRequest struct {
 	upstreamClient          *http.Client
 	upstreamResponse        *http.Response
 	upstreamRequest         *http.Request
+	enableHTTPS             bool
 	httpsInsecureSkipVerify bool
 }
 
-func NewProxyRequest(rw http.ResponseWriter, origReq *http.Request, transportRegular, transportTLSSkipVerify http.RoundTripper) *proxyRequest {
+func NewProxyRequest(rw http.ResponseWriter, origReq *http.Request, transportRegular, transportTLSSkipVerify http.RoundTripper, enableHTTPS bool) *proxyRequest {
 	return &proxyRequest{
 		rw:                     rw,
 		origReq:                origReq,
 		transportRegular:       transportRegular,
 		transportTLSSkipVerify: transportTLSSkipVerify,
+		enableHTTPS:            enableHTTPS,
 	}
 }
 
@@ -57,6 +60,7 @@ func (pr *proxyRequest) Handle() error {
 	metricRequestsTotal.Inc()
 	timer := prometheus.NewTimer(metricRequestDuration)
 	defer timer.ObserveDuration()
+	pr.prepareHTTPSURL()
 	pr.buildURL()
 	log.WithFields(log.Fields{
 		"method": pr.origReq.Method,
@@ -81,7 +85,10 @@ func (pr *proxyRequest) Handle() error {
 	return nil
 }
 
-func (pr *proxyRequest) buildURL() {
+func (pr *proxyRequest) prepareHTTPSURL() {
+	if !pr.enableHTTPS {
+		return
+	}
 	https := pr.origReq.URL.Query().Get("__sshified_use_https")
 	if https == "" {
 		pr.origReq.URL.Scheme = "http"
@@ -98,6 +105,9 @@ func (pr *proxyRequest) buildURL() {
 		}
 		pr.origReq.URL.RawQuery = values.Encode()
 	}
+}
+
+func (pr *proxyRequest) buildURL() {
 	pr.origReq.URL.Host = pr.origReq.Host
 	pr.requestedURL = pr.origReq.URL.String()
 }
