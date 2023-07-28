@@ -1,3 +1,5 @@
+* v1.1.14
+  - Downgrade build environment go go1.19 for rhel8 compatibility
 * v1.1.13
   - Enable https support in cascaded sshified setups
 * v1.1.12
