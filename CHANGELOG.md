@@ -1,3 +1,5 @@
+* v1.1.15
+  - Make connecting to non-lowercased hostnames work by default
 * v1.1.14
   - Downgrade build environment go go1.19 for rhel8 compatibility
 * v1.1.13
