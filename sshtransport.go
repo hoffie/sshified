@@ -133,7 +133,7 @@ func (t *sshTransport) dial(network, addr string) (net.Conn, error) {
 }
 
 // getHostkeyAlgosFor queries the knownhosts database for the given hostport with an invalid
-// key to match against. This generates an error whoch can be used to query for the
+// key to match against. This generates an error which can be used to query for the
 // available key type algorithms.
 func (t *sshTransport) getHostkeyAlgosFor(hostport string) ([]string, error) {
 	placeholderAddr := &net.TCPAddr{IP: []byte{0, 0, 0, 0}}
