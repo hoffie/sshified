@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -152,6 +153,7 @@ func (t *sshTransport) getHostkeyAlgosFor(hostport string) ([]string, error) {
 }
 
 func (t *sshTransport) getSSHClient(host string) (*ssh.Client, error) {
+	host = strings.ToLower(host)
 	client, cached := t.sshClientPool.get(host)
 	if cached {
 		log.WithFields(log.Fields{"host": host}).Trace("using cached ssh connection")

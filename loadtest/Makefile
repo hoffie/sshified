@@ -10,6 +10,7 @@ prepare:
 		sudo -u $(USER) chmod 700 /home/$(USER)/.ssh/
 		sudo -u $(USER) chmod 600 /home/$(USER)/.ssh/authorized_keys
 		ssh-keyscan 127.0.0.1 > conf/known_hosts
+		ssh-keyscan localhost >> conf/known_hosts
 
 cleanup:
 	rm -rf conf/
@@ -25,4 +26,6 @@ run-sshified:
 	../sshified --proxy.listen-addr 127.0.0.1:8888 --ssh.user $(USER) --ssh.key-file conf/id_rsa --ssh.known-hosts-file conf/known_hosts
 
 run-loadtest:
+	curl --fail-with-body -x 127.0.0.1:8888 http://localhost:8080/bar -v
+	curl --fail-with-body -x 127.0.0.1:8888 http://LOCALHOST:8080/bar -v
 	ab -n20000 -c500 -X 127.0.0.1:8888 http://127.0.0.1:8080/bar
