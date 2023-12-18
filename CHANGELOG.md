@@ -1,3 +1,5 @@
+* v1.1.16
+  - Update vendored dependencies, especially golang.org/x/crypto for CVE-2023-48795
 * v1.1.15
   - Make connecting to non-lowercased hostnames work by default
 * v1.1.14
