@@ -2,15 +2,15 @@
 USER = sshified-test
 
 prepare:
-		mkdir -p conf/
-		id $(USER) || sudo useradd $(USER) -s /bin/false -m
-		ssh-keygen -f conf/id_rsa -N ""
-		sudo -u $(USER) mkdir -p /home/$(USER)/.ssh/
-		sudo -u $(USER) tee /home/$(USER)/.ssh/authorized_keys < conf/id_rsa.pub
-		sudo -u $(USER) chmod 700 /home/$(USER)/.ssh/
-		sudo -u $(USER) chmod 600 /home/$(USER)/.ssh/authorized_keys
-		ssh-keyscan 127.0.0.1 > conf/known_hosts
-		ssh-keyscan localhost >> conf/known_hosts
+	mkdir -p conf/
+	id $(USER) || sudo useradd $(USER) -s /bin/false -m
+	ssh-keygen -f conf/id_rsa -N ""
+	sudo -u $(USER) mkdir -p /home/$(USER)/.ssh/
+	sudo -u $(USER) tee /home/$(USER)/.ssh/authorized_keys < conf/id_rsa.pub
+	sudo -u $(USER) chmod 700 /home/$(USER)/.ssh/
+	sudo -u $(USER) chmod 600 /home/$(USER)/.ssh/authorized_keys
+	ssh-keyscan 127.0.0.1 > conf/known_hosts
+	ssh-keyscan localhost >> conf/known_hosts
 
 cleanup:
 	rm -rf conf/

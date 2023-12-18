@@ -1,0 +1,32 @@
+name: Run tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.19'
+
+    - name: Build
+      run: go build -v
+
+    - name: Test
+      run: go test -v ./...
+
+    - name: Integration test
+      run: |
+        cd loadtest
+        make prepare
+        make run-webserver &
+        make run-sshified &
+        sleep 10
+        make run-loadtest
