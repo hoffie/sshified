@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -75,9 +76,8 @@ func (t *sshTransport) LoadFiles() error {
 
 func (t *sshTransport) createTransports() {
 	transportRegular := &http.Transport{
-		Proxy: nil,
-		Dial:  t.dial,
-		// FIXME: DialContext
+		Proxy:                 nil,
+		DialContext:           t.dialContext,
 		MaxIdleConns:          100,
 		IdleConnTimeout:       time.Duration(*timeout) * 2 * time.Second,
 		ResponseHeaderTimeout: time.Duration(*timeout) * time.Second,
@@ -94,7 +94,7 @@ func (t *sshTransport) checkHostKey(hostname string, remote net.Addr, key ssh.Pu
 	return nil
 }
 
-func (t *sshTransport) dial(network, addr string) (net.Conn, error) {
+func (t *sshTransport) dialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	if network != "tcp" {
 		log.WithFields(log.Fields{"network": network, "addr": addr}).Error("network type not supported")
 		return nil, fmt.Errorf("network type %s is not supported", network)
@@ -113,7 +113,7 @@ func (t *sshTransport) dial(network, addr string) (net.Conn, error) {
 			return nil, fmt.Errorf("failed to obtain ssh connection: %s", err)
 		}
 		log.WithFields(log.Fields{"port": targetPort}).Trace("connecting")
-		conn, err := client.Dial("tcp4", fmt.Sprintf("%s:%d", "127.0.0.1", targetPort))
+		conn, err := client.DialContext(ctx, "tcp4", fmt.Sprintf("%s:%d", "127.0.0.1", targetPort))
 		log.WithFields(log.Fields{"port": targetPort, "err": err}).Trace("done")
 		if err == nil {
 			return conn, nil
@@ -184,6 +184,8 @@ func (t *sshTransport) getSSHClient(host string) (*ssh.Client, error) {
 		HostKeyAlgorithms: upgradedHostKeyAlgos,
 		Timeout:           time.Duration(*timeout) * time.Second,
 	}
+	// TODO: This should use DialContext once this PR is merged:
+	// https://github.com/golang/go/issues/64686
 	client, err = ssh.Dial("tcp", sshAddr, clientConfig)
 	if err == nil {
 		log.WithFields(log.Fields{"host": host}).Trace("caching successful ssh connection")
