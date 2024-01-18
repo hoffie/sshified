@@ -22,6 +22,12 @@ var (
 			Help: "Number of cached ssh connections",
 		},
 	)
+	metricSshKeepaliveFailuresTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "sshified_ssh_keepalive_failures_total",
+			Help: "Total of all SSH keepalive failures (aborts, reconnects)",
+		},
+	)
 	metricRequestDuration = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Name:    "sshified_request_duration_seconds",
@@ -46,6 +52,7 @@ var (
 func init() {
 	prometheus.MustRegister(metricPayloadBytes)
 	prometheus.MustRegister(metricSshclientPool)
+	prometheus.MustRegister(metricSshKeepaliveFailuresTotal)
 	prometheus.MustRegister(metricRequestDuration)
 	prometheus.MustRegister(metricRequestsTotal)
 	prometheus.MustRegister(metricRequestsFailedTotal)

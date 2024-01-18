@@ -1,3 +1,5 @@
+* v1.1.17
+  - Add metric sshified_ssh_keepalive_failures_total to for better visibility into broken SSH connections
 * v1.1.16
   - Update vendored dependencies, especially golang.org/x/crypto for CVE-2023-48795
 * v1.1.15

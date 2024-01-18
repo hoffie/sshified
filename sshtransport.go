@@ -125,6 +125,7 @@ func (t *sshTransport) dial(network, addr string) (net.Conn, error) {
 			log.WithFields(log.Fields{"host": targetHost, "err": keepAliveErr}).Debug("keepalive failed, reconnecting")
 			t.sshClientPool.delete(targetHost)
 			_ = client.Close()
+			metricSshKeepaliveFailuresTotal.Inc()
 			retry = false
 			continue
 		}
