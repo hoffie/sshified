@@ -12,20 +12,22 @@ import (
 )
 
 var (
-	verbose           = kingpin.Flag("verbose", "Verbose mode.").Short('v').Bool()
-	trace             = kingpin.Flag("trace", "Trace mode.").Bool()
-	proxyAddr         = kingpin.Flag("proxy.listen-addr", "address the proxy will listen on").Required().String()
-	nextProxyAddr     = kingpin.Flag("next-proxy.addr", "optional address of another http proxy when cascading usage is required").String()
-	metricsAddr       = kingpin.Flag("metrics.listen-addr", "adress the service will listen on for metrics request about itself").String()
-	sshUser           = kingpin.Flag("ssh.user", "username used for connecting via ssh").Required().String()
-	sshKeyFile        = kingpin.Flag("ssh.key-file", "private key file used for connecting via ssh").Required().String()
-	sshKnownHostsFile = kingpin.Flag("ssh.known-hosts-file", "known hosts file used for connecting via ssh").Required().String()
-	sshPort           = kingpin.Flag("ssh.port", "port used for connecting via ssh").Default("22").Int()
-	timeout           = kingpin.Flag("timeout", "full roundtrip request timeout in seconds").Default("50").Int()
+	verbose                = kingpin.Flag("verbose", "Verbose mode.").Short('v').Bool()
+	trace                  = kingpin.Flag("trace", "Trace mode.").Bool()
+	proxyAddr              = kingpin.Flag("proxy.listen-addr", "address the proxy will listen on").Required().String()
+	nextProxyAddr          = kingpin.Flag("next-proxy.addr", "optional address of another http proxy when cascading usage is required").String()
+	metricsAddr            = kingpin.Flag("metrics.listen-addr", "adress the service will listen on for metrics request about itself").String()
+	sshUser                = kingpin.Flag("ssh.user", "username used for connecting via ssh").Required().String()
+	sshKeyFile             = kingpin.Flag("ssh.key-file", "private key file used for connecting via ssh").Required().String()
+	sshKnownHostsFile      = kingpin.Flag("ssh.known-hosts-file", "known hosts file used for connecting via ssh").Required().String()
+	sshPort                = kingpin.Flag("ssh.port", "port used for connecting via ssh").Default("22").Int()
+	timeout                = kingpin.Flag("timeout", "full roundtrip request timeout in seconds").Default("50").Int()
+	timeoutDurationSeconds time.Duration
 )
 
 func main() {
 	kingpin.Parse()
+	timeoutDurationSeconds = time.Duration(*timeout) * time.Second
 	if *trace {
 		log.SetLevel(log.TraceLevel)
 	} else if *verbose {
@@ -48,7 +50,7 @@ func main() {
 		Addr:           *proxyAddr,
 		Handler:        ph,
 		ReadTimeout:    10 * time.Second,
-		WriteTimeout:   time.Duration(*timeout) * time.Second,
+		WriteTimeout:   timeoutDurationSeconds,
 		MaxHeaderBytes: 1 << 20,
 	}
 

@@ -79,8 +79,8 @@ func (t *sshTransport) createTransports() {
 		Proxy:                 nil,
 		DialContext:           t.dialContext,
 		MaxIdleConns:          100,
-		IdleConnTimeout:       time.Duration(*timeout) * 2 * time.Second,
-		ResponseHeaderTimeout: time.Duration(*timeout) * time.Second,
+		IdleConnTimeout:       2 * timeoutDurationSeconds,
+		ResponseHeaderTimeout: timeoutDurationSeconds,
 		ExpectContinueTimeout: 1 * time.Second,
 	}
 	transportTLSSkipVerify := transportRegular.Clone()
@@ -131,7 +131,7 @@ func (t *sshTransport) dialContext(ctx context.Context, network, addr string) (n
 				log.WithFields(log.Fields{"host": targetHost}).Debug("keepalive worked, this is not an ssh conn problem")
 				return nil, err
 			}
-		case <-time.After(time.Duration(*timeout) * time.Second):
+		case <-time.After(timeoutDurationSeconds):
 			keepAliveErr = fmt.Errorf("failed to receive keepalive within %d seconds, reconnecting", timeout)
 		}
 		log.WithFields(log.Fields{"host": targetHost, "err": keepAliveErr}).Debug("keepalive failed, reconnecting")
@@ -182,7 +182,7 @@ func (t *sshTransport) getSSHClient(host string) (*ssh.Client, error) {
 		Auth:              t.auth,
 		HostKeyCallback:   t.knownHostsCallback,
 		HostKeyAlgorithms: upgradedHostKeyAlgos,
-		Timeout:           time.Duration(*timeout) * time.Second,
+		Timeout:           timeoutDurationSeconds,
 	}
 	// TODO: This should use DialContext once this PR is merged:
 	// https://github.com/golang/go/issues/64686
