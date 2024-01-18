@@ -115,31 +115,31 @@ func (t *sshTransport) dial(network, addr string) (net.Conn, error) {
 		log.WithFields(log.Fields{"port": targetPort}).Trace("connecting")
 		conn, err := client.Dial("tcp4", fmt.Sprintf("%s:%d", "127.0.0.1", targetPort))
 		log.WithFields(log.Fields{"port": targetPort, "err": err}).Trace("done")
-		if err != nil {
-			log.WithFields(log.Fields{"host": targetHost, "err": err}).Debug("connection failed, sending keepalive")
-			errChan := make(chan error)
-			go func() {
-				_, _, err := client.SendRequest("keepalive@openssh.com", true, nil)
-				errChan <- err
-			}()
-			var keepAliveErr error
-			select {
-			case keepAliveErr = <-errChan:
-				if keepAliveErr == nil {
-					log.WithFields(log.Fields{"host": targetHost}).Debug("keepalive worked, this is not an ssh conn problem")
-					return nil, err
-				}
-			case <-time.After(time.Duration(*timeout) * time.Second):
-				keepAliveErr = fmt.Errorf("failed to receive keepalive within %d seconds, reconnecting", timeout)
-			}
-			log.WithFields(log.Fields{"host": targetHost, "err": keepAliveErr}).Debug("keepalive failed, reconnecting")
-			t.sshClientPool.delete(targetHost)
-			_ = client.Close()
-			metricSshKeepaliveFailuresTotal.Inc()
-			retry = false
-			continue
+		if err == nil {
+			return conn, nil
 		}
-		return conn, err
+		log.WithFields(log.Fields{"host": targetHost, "err": err}).Debug("connection failed, sending keepalive")
+		errChan := make(chan error)
+		go func() {
+			_, _, err := client.SendRequest("keepalive@openssh.com", true, nil)
+			errChan <- err
+		}()
+		var keepAliveErr error
+		select {
+		case keepAliveErr = <-errChan:
+			if keepAliveErr == nil {
+				log.WithFields(log.Fields{"host": targetHost}).Debug("keepalive worked, this is not an ssh conn problem")
+				return nil, err
+			}
+		case <-time.After(time.Duration(*timeout) * time.Second):
+			keepAliveErr = fmt.Errorf("failed to receive keepalive within %d seconds, reconnecting", timeout)
+		}
+		log.WithFields(log.Fields{"host": targetHost, "err": keepAliveErr}).Debug("keepalive failed, reconnecting")
+		t.sshClientPool.delete(targetHost)
+		_ = client.Close()
+		metricSshKeepaliveFailuresTotal.Inc()
+		retry = false
+		continue
 	}
 	return nil, err
 }
