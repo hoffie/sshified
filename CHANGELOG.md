@@ -1,7 +1,7 @@
 * v1.1.17
   - Enforce timeout and reconnect when awaiting an SSH keepalive reply to avoid long-stuck requests
   - Enforce timeout during inband port forwarding connect to ensure proper cleaning of stuck SSH connections
-  - Add metric sshified_ssh_keepalive_failures_total to for better visibility into broken SSH connections
+  - Add metric sshified_ssh_keepalive_failures_total for better visibility into broken SSH connections
 * v1.1.16
   - Update vendored dependencies, especially golang.org/x/crypto for CVE-2023-48795
 * v1.1.15
