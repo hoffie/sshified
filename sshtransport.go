@@ -117,10 +117,20 @@ func (t *sshTransport) dial(network, addr string) (net.Conn, error) {
 		log.WithFields(log.Fields{"port": targetPort, "err": err}).Trace("done")
 		if err != nil {
 			log.WithFields(log.Fields{"host": targetHost, "err": err}).Debug("connection failed, sending keepalive")
-			_, _, keepAliveErr := client.SendRequest("keepalive@openssh.com", true, nil)
-			if keepAliveErr == nil {
-				log.WithFields(log.Fields{"host": targetHost}).Debug("keepalive worked, this is not an ssh conn problem")
-				return nil, err
+			errChan := make(chan error)
+			go func() {
+				_, _, err := client.SendRequest("keepalive@openssh.com", true, nil)
+				errChan <- err
+			}()
+			var keepAliveErr error
+			select {
+			case keepAliveErr = <-errChan:
+				if keepAliveErr == nil {
+					log.WithFields(log.Fields{"host": targetHost}).Debug("keepalive worked, this is not an ssh conn problem")
+					return nil, err
+				}
+			case <-time.After(time.Duration(*timeout) * time.Second):
+				keepAliveErr = fmt.Errorf("failed to receive keepalive within %d seconds, reconnecting", timeout)
 			}
 			log.WithFields(log.Fields{"host": targetHost, "err": keepAliveErr}).Debug("keepalive failed, reconnecting")
 			t.sshClientPool.delete(targetHost)
