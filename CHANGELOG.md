@@ -1,3 +1,10 @@
+* v1.1.18
+  - Metrics: Improve tracking of error types with new metric sshified_connection_errors_total
+  - Fix timeout value in error message
+  - Fix potential crash: avoid terminating ssh clients with active connections
+  - Timeout keepalive earlier as we still need time budget for the reconnect
+  - Update vendored dependencies
+
 * v1.1.17
   - Enforce timeout and reconnect when awaiting an SSH keepalive reply to avoid long-stuck requests
   - Enforce timeout during inband port forwarding connect to ensure proper cleaning of stuck SSH connections
