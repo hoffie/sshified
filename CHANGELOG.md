@@ -1,3 +1,6 @@
+* v1.1.19
+  - Update to Go 1.22 with CGO disabled to retain compatibility with older systems
+
 * v1.1.18
   - Metrics: Improve tracking of error types with new metric sshified_connection_errors_total
   - Fix timeout value in error message
