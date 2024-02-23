@@ -195,7 +195,7 @@ func (t *sshTransport) dialContext(ctx context.Context, network, addr string) (n
 				return nil, err
 			}
 		case <-time.After(timeoutDurationSeconds / 2):
-			keepAliveErr = fmt.Errorf("failed to receive keepalive within %d seconds, reconnecting", timeout)
+			keepAliveErr = fmt.Errorf("failed to receive keepalive within %d seconds, reconnecting", *timeout)
 		}
 		log.WithFields(log.Fields{"host": targetHost, "err": keepAliveErr}).Debug("keepalive failed, reconnecting")
 		t.sshClientPool.delete(targetHost)
