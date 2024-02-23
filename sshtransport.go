@@ -131,7 +131,7 @@ func (t *sshTransport) dialContext(ctx context.Context, network, addr string) (n
 				log.WithFields(log.Fields{"host": targetHost}).Debug("keepalive worked, this is not an ssh conn problem")
 				return nil, err
 			}
-		case <-time.After(timeoutDurationSeconds):
+		case <-time.After(timeoutDurationSeconds / 2):
 			keepAliveErr = fmt.Errorf("failed to receive keepalive within %d seconds, reconnecting", timeout)
 		}
 		log.WithFields(log.Fields{"host": targetHost, "err": keepAliveErr}).Debug("keepalive failed, reconnecting")
