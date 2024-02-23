@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -41,6 +42,68 @@ type sshTransport struct {
 	knownHostsFile         string
 	knownHostsCallback     ssh.HostKeyCallback
 	nextProxyAddr          string
+}
+
+// trackingSshClient wraps an ssh.Client and tracks
+// all connections opened via DialContext and closed via conn.Close().
+// This allows it to implement a safe CloseWhenFinished method,
+// which can be used to delay closing of the SSH client until the last
+// contained connection has been closed properly.
+// This avoids crashing when the SSH connection aborts
+// while there's still an inflight HTTP connection over an SSH
+// channel.
+type trackingSshClient struct {
+	*ssh.Client
+	mtx           sync.Mutex
+	inflightConns int64
+	shouldClose   bool
+}
+
+// trackingSshConn is a wrapper for net.Conn, which is used by
+// trackingSshClient to ensure that closed connections are properly
+// tracked in the client.
+type trackingSshConn struct {
+	net.Conn
+	closeFunc func()
+}
+
+func (conn trackingSshConn) Close() error {
+	err := conn.Conn.Close()
+	conn.closeFunc()
+	return err
+}
+
+func (c *trackingSshClient) DialContext(ctx context.Context, n, addr string) (net.Conn, error) {
+	c.mtx.Lock()
+	c.inflightConns += 1
+	c.mtx.Unlock()
+	conn, err := c.Client.DialContext(ctx, n, addr)
+	if err != nil {
+		c.connCloseCallback()
+		return conn, err
+	}
+	tc := trackingSshConn{Conn: conn, closeFunc: c.connCloseCallback}
+	return tc, err
+}
+
+func (c *trackingSshClient) connCloseCallback() {
+	c.mtx.Lock()
+	c.inflightConns -= 1
+	c.mtx.Unlock()
+}
+
+func (c *trackingSshClient) CloseWhenFinished() error {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	c.shouldClose = true
+	var err error
+	if c.inflightConns <= 0 {
+		log.Trace("closing ssh transport connection")
+		err = c.Close()
+	} else {
+		log.WithFields(log.Fields{"inflightConns": c.inflightConns}).Trace("delaying closing of ssh transport connection due to active connections")
+	}
+	return err
 }
 
 func NewSSHTransport(user, keyFile, knownHostsFile string, port int, nextProxyAddr string) (*sshTransport, error) {
@@ -136,7 +199,10 @@ func (t *sshTransport) dialContext(ctx context.Context, network, addr string) (n
 		}
 		log.WithFields(log.Fields{"host": targetHost, "err": keepAliveErr}).Debug("keepalive failed, reconnecting")
 		t.sshClientPool.delete(targetHost)
-		_ = client.Close()
+		// Don't close right away, there might still be inflight
+		// requests which would otherwise crash as they reference
+		// invalid memory:
+		_ = client.CloseWhenFinished()
 		metricSshKeepaliveFailuresTotal.Inc()
 		retry = false
 		continue
@@ -163,7 +229,7 @@ func (t *sshTransport) getHostkeyAlgosFor(hostport string) ([]string, error) {
 	return algos, nil
 }
 
-func (t *sshTransport) getSSHClient(host string) (*ssh.Client, error) {
+func (t *sshTransport) getSSHClient(host string) (*trackingSshClient, error) {
 	host = strings.ToLower(host)
 	client, cached := t.sshClientPool.get(host)
 	if cached {
@@ -186,7 +252,8 @@ func (t *sshTransport) getSSHClient(host string) (*ssh.Client, error) {
 	}
 	// TODO: This should use DialContext once this PR is merged:
 	// https://github.com/golang/go/issues/64686
-	client, err = ssh.Dial("tcp", sshAddr, clientConfig)
+	plainClient, err := ssh.Dial("tcp", sshAddr, clientConfig)
+	client = &trackingSshClient{Client: plainClient}
 	if err == nil {
 		log.WithFields(log.Fields{"host": host}).Trace("caching successful ssh connection")
 		cachedClient, cached := t.sshClientPool.setOrGetCached(host, client)
