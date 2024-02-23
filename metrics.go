@@ -16,6 +16,13 @@ var (
 			Help: "Total of all payload data transferred",
 		},
 	)
+	metricErrorsByType = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "sshified_connection_errors_total",
+			Help: "Total of all error occurences by type",
+		},
+		[]string{"type"},
+	)
 	metricSshclientPool = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "sshified_sshclient_pool_total",
@@ -56,6 +63,7 @@ func init() {
 	prometheus.MustRegister(metricRequestDuration)
 	prometheus.MustRegister(metricRequestsTotal)
 	prometheus.MustRegister(metricRequestsFailedTotal)
+	prometheus.MustRegister(metricErrorsByType)
 }
 
 func setupMetrics(addr string) {

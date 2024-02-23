@@ -118,6 +118,7 @@ func (pr *proxyRequest) buildRequest() error {
 	if err != nil {
 		pr.rw.WriteHeader(http.StatusInternalServerError)
 		log.Error("failed to create upstream request")
+		metricErrorsByType.WithLabelValues("request_creation").Inc()
 		return errors.New("request creation failure")
 	}
 	for k, vv := range pr.origReq.Header {
@@ -153,6 +154,7 @@ func (pr *proxyRequest) sendRequest() error {
 	if err != nil {
 		pr.rw.WriteHeader(http.StatusBadGateway)
 		log.WithFields(log.Fields{"err": err}).Debug("upstream request failed")
+		metricErrorsByType.WithLabelValues("upstream_request").Inc()
 		return errors.New("upstream request failed")
 	}
 	pr.upstreamResponse = upstreamResponse
@@ -175,6 +177,7 @@ func (pr *proxyRequest) forwardResponse() error {
 	length, err := io.Copy(pr.rw, pr.upstreamResponse.Body)
 	if err != nil {
 		log.WithFields(log.Fields{"err": err}).Debug("failed to forward response body")
+		metricErrorsByType.WithLabelValues("response_body_forwarding").Inc()
 		return errors.New("failed to forward response body")
 	}
 	log.WithFields(log.Fields{"len": length}).Trace("done with copying response body")

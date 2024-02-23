@@ -167,12 +167,14 @@ func (t *sshTransport) dialContext(ctx context.Context, network, addr string) (n
 	}
 	targetHost, targetPort, err := splitAddr(addr)
 	if err != nil {
+		metricErrorsByType.WithLabelValues("address_parsing").Inc()
 		return nil, errors.New("failed to parse address")
 	}
 	retry := true
 	for retry {
 		client, err := t.getSSHClient(targetHost)
 		if err != nil {
+			metricErrorsByType.WithLabelValues("ssh_connection").Inc()
 			return nil, fmt.Errorf("failed to obtain ssh connection: %s", err)
 		}
 		log.WithFields(log.Fields{"port": targetPort}).Trace("connecting")
@@ -194,8 +196,10 @@ func (t *sshTransport) dialContext(ctx context.Context, network, addr string) (n
 				log.WithFields(log.Fields{"host": targetHost}).Debug("keepalive worked, this is not an ssh conn problem")
 				return nil, err
 			}
+			metricErrorsByType.WithLabelValues("ssh_keepalive_failure").Inc()
 		case <-time.After(timeoutDurationSeconds / 2):
 			keepAliveErr = fmt.Errorf("failed to receive keepalive within %d seconds, reconnecting", *timeout)
+			metricErrorsByType.WithLabelValues("ssh_keepalive_timeout").Inc()
 		}
 		log.WithFields(log.Fields{"host": targetHost, "err": keepAliveErr}).Debug("keepalive failed, reconnecting")
 		t.sshClientPool.delete(targetHost)
@@ -224,6 +228,7 @@ func (t *sshTransport) getHostkeyAlgosFor(hostport string) ([]string, error) {
 		}
 	}
 	if len(algos) < 1 {
+		metricErrorsByType.WithLabelValues("ssh_host_key_unknown").Inc()
 		return []string{}, fmt.Errorf("no matching known hosts entry for %s", hostport)
 	}
 	return algos, nil
