@@ -30,7 +30,7 @@ jobs:
       run: rsync sshified README.md LICENSE sshified-${{ env.release_version }}-linux-amd64 && tar cvjf sshified-${{ env.release_version }}-linux-amd64.tar.bz2 sshified-${{ env.release_version }}-linux-amd64
 
     - name: Release
-      uses: softprops/action-gh-release@4634c16e79c963813287e889244c50009e7f0981
+      uses: softprops/action-gh-release@975c1b265e11dd76618af1c374e7981f9a6ff44a
       if: startsWith(github.ref, 'refs/tags/')
       with:
         body_path: CHANGELOG.md
