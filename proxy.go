@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/textparse"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -161,8 +165,53 @@ func (pr *proxyRequest) sendRequest() error {
 	return nil
 }
 
+func parsableAsPrometheus(b []byte, contentType string) error {
+	parser, err := textparse.New(b, contentType, false, labels.NewSymbolTable())
+	if err != nil {
+		return errors.New("failed to create parser for Prometheus metrics format")
+	}
+	for {
+		_, err := parser.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("failed to parse as Prometheus metrics format: %v", err)
+		}
+	}
+	return nil
+}
+
 func (pr *proxyRequest) forwardResponse() error {
+	assumeHttpErr := true
+	defer func() {
+		if assumeHttpErr {
+			pr.rw.WriteHeader(http.StatusInternalServerError)
+		}
+	}()
 	respHeader := pr.rw.Header()
+	var reader io.Reader
+	if *responseMaxBytes <= 0 {
+		reader = pr.upstreamResponse.Body
+	} else {
+		lr := io.LimitReader(pr.upstreamResponse.Body, *responseMaxBytes)
+		var buf = bytes.Buffer{}
+		_, err := io.Copy(&buf, lr)
+		if err != nil {
+			return fmt.Errorf("failed to copy response to buffer: %v", err)
+		}
+		reader = &buf
+		if *responseRejectNonPrometheus {
+			log.Trace("parsing response as prometheus metrics")
+			err := parsableAsPrometheus(buf.Bytes(), respHeader.Get("Content-Type"))
+			if err != nil {
+				assumeHttpErr = false
+				pr.rw.WriteHeader(http.StatusBadGateway)
+				return err
+			}
+		}
+	}
+
 	for k, vv := range pr.upstreamResponse.Header {
 		if k == "Content-Length" {
 			continue
@@ -172,9 +221,10 @@ func (pr *proxyRequest) forwardResponse() error {
 			respHeader.Add(k, v)
 		}
 	}
+	assumeHttpErr = false
 	pr.rw.WriteHeader(pr.upstreamResponse.StatusCode)
 	log.Trace("copying response body")
-	length, err := io.Copy(pr.rw, pr.upstreamResponse.Body)
+	length, err := io.Copy(pr.rw, reader)
 	if err != nil {
 		log.WithFields(log.Fields{"err": err}).Debug("failed to forward response body")
 		metricErrorsByType.WithLabelValues("response_body_forwarding").Inc()

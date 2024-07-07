@@ -12,17 +12,19 @@ import (
 )
 
 var (
-	verbose                = kingpin.Flag("verbose", "Verbose mode.").Short('v').Bool()
-	trace                  = kingpin.Flag("trace", "Trace mode.").Bool()
-	proxyAddr              = kingpin.Flag("proxy.listen-addr", "address the proxy will listen on").Required().String()
-	nextProxyAddr          = kingpin.Flag("next-proxy.addr", "optional address of another http proxy when cascading usage is required").String()
-	metricsAddr            = kingpin.Flag("metrics.listen-addr", "adress the service will listen on for metrics request about itself").String()
-	sshUser                = kingpin.Flag("ssh.user", "username used for connecting via ssh").Required().String()
-	sshKeyFile             = kingpin.Flag("ssh.key-file", "private key file used for connecting via ssh").Required().String()
-	sshKnownHostsFile      = kingpin.Flag("ssh.known-hosts-file", "known hosts file used for connecting via ssh").Required().String()
-	sshPort                = kingpin.Flag("ssh.port", "port used for connecting via ssh").Default("22").Int()
-	timeout                = kingpin.Flag("timeout", "full roundtrip request timeout in seconds").Default("50").Int()
-	timeoutDurationSeconds time.Duration
+	verbose                     = kingpin.Flag("verbose", "Verbose mode.").Short('v').Bool()
+	trace                       = kingpin.Flag("trace", "Trace mode.").Bool()
+	proxyAddr                   = kingpin.Flag("proxy.listen-addr", "address the proxy will listen on").Required().String()
+	nextProxyAddr               = kingpin.Flag("next-proxy.addr", "optional address of another http proxy when cascading usage is required").String()
+	metricsAddr                 = kingpin.Flag("metrics.listen-addr", "adress the service will listen on for metrics request about itself").String()
+	sshUser                     = kingpin.Flag("ssh.user", "username used for connecting via ssh").Required().String()
+	sshKeyFile                  = kingpin.Flag("ssh.key-file", "private key file used for connecting via ssh").Required().String()
+	sshKnownHostsFile           = kingpin.Flag("ssh.known-hosts-file", "known hosts file used for connecting via ssh").Required().String()
+	sshPort                     = kingpin.Flag("ssh.port", "port used for connecting via ssh").Default("22").Int()
+	timeout                     = kingpin.Flag("timeout", "full roundtrip request timeout in seconds").Default("50").Int()
+	timeoutDurationSeconds      time.Duration
+	responseMaxBytes            = kingpin.Flag("response.max-bytes", "maximum length of upstream response in bytes (0 = no limit)").Default("0").Int64()
+	responseRejectNonPrometheus = kingpin.Flag("response.reject-non-prometheus", "parse upstream response as Prometheus metrics and reject unparsable responses").Bool()
 )
 
 func main() {
@@ -34,6 +36,9 @@ func main() {
 		log.SetLevel(log.DebugLevel)
 	} else {
 		log.SetLevel(log.InfoLevel)
+	}
+	if *responseMaxBytes <= 0 && *responseRejectNonPrometheus {
+		kingpin.Fatalf("setting --response.reject-non-prometheus also requires setting a --response.max-bytes value due to internal buffering needs")
 	}
 	log.WithFields(log.Fields{"addr": *proxyAddr}).Info("Listening")
 	if *nextProxyAddr != "" {
