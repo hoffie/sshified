@@ -1,3 +1,7 @@
+* v1.2.0
+  - Add support for --response.max-bytes to limit responses
+  - Add supporf for --response.reject-non-prometheus to force responses to be parsable Prometheus metrics (as this is a common use case)
+
 * v1.1.19
   - Update to Go 1.22 with CGO disabled to retain compatibility with older systems
 
