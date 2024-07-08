@@ -2,9 +2,11 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"strings"
 
@@ -190,6 +192,7 @@ func (pr *proxyRequest) forwardResponse() error {
 		}
 	}()
 	respHeader := pr.rw.Header()
+	upstreamRespHeader := pr.upstreamResponse.Header
 	var reader io.Reader
 	if *responseMaxBytes <= 0 {
 		reader = pr.upstreamResponse.Body
@@ -203,7 +206,26 @@ func (pr *proxyRequest) forwardResponse() error {
 		reader = &buf
 		if *responseRejectNonPrometheus {
 			log.Trace("parsing response as prometheus metrics")
-			err := parsableAsPrometheus(buf.Bytes(), respHeader.Get("Content-Type"))
+			var decBytes []byte
+			switch upstreamRespHeader.Get("Content-Encoding") {
+			case "gzip":
+				log.Trace("decoding gzip response")
+				bufReader := bytes.NewReader(buf.Bytes())
+				gzipReader, err := gzip.NewReader(bufReader)
+				if err != nil {
+					return fmt.Errorf("failed to create gzip reader: %v", err)
+				}
+				defer gzipReader.Close()
+				gzipLimitReader := io.LimitReader(gzipReader, *responseMaxBytes)
+				decBytes, err = ioutil.ReadAll(gzipLimitReader)
+				if err != nil {
+					return fmt.Errorf("failed to create gzip reader: %v", err)
+				}
+			default:
+				log.WithFields(log.Fields{"headers": upstreamRespHeader}).Trace("headers")
+				decBytes = buf.Bytes()
+			}
+			err := parsableAsPrometheus(decBytes, upstreamRespHeader.Get("Content-Type"))
 			if err != nil {
 				assumeHttpErr = false
 				pr.rw.WriteHeader(http.StatusBadGateway)
