@@ -1,13 +1,14 @@
 module github.com/hoffie/sshified
 
 go 1.21
+toolchain go1.24.1
 
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/prometheus/client_golang v1.21.1
 	github.com/prometheus/prometheus v0.53.0
 	github.com/sirupsen/logrus v1.9.3
-	golang.org/x/crypto v0.31.0
+	golang.org/x/crypto v0.37.0
 )
 
 require (
@@ -22,6 +23,6 @@ require (
 	github.com/prometheus/common v0.62.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/sys v0.32.0 // indirect
 	google.golang.org/protobuf v1.36.1 // indirect
 )
