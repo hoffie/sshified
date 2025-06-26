@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"strings"
 
@@ -217,7 +216,7 @@ func (pr *proxyRequest) forwardResponse() error {
 				}
 				defer gzipReader.Close()
 				gzipLimitReader := io.LimitReader(gzipReader, *responseMaxBytes)
-				decBytes, err = ioutil.ReadAll(gzipLimitReader)
+				decBytes, err = io.ReadAll(gzipLimitReader)
 				if err != nil {
 					return fmt.Errorf("failed to create gzip reader: %v", err)
 				}
