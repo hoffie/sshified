@@ -7,7 +7,11 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+<<<<<<< replace-deprecated-calls
 	"os"
+=======
+	"strconv"
+>>>>>>> master
 	"strings"
 	"sync"
 	"time"
@@ -165,7 +169,7 @@ func (t *sshTransport) dialContext(ctx context.Context, network, addr string) (n
 	if t.nextProxyAddr != "" {
 		addr = t.nextProxyAddr
 	}
-	targetHost, targetPort, err := splitAddr(addr)
+	targetHost, targetPort, err := net.SplitHostPort(addr)
 	if err != nil {
 		metricErrorsByType.WithLabelValues("address_parsing").Inc()
 		return nil, errors.New("failed to parse address")
@@ -178,7 +182,7 @@ func (t *sshTransport) dialContext(ctx context.Context, network, addr string) (n
 			return nil, fmt.Errorf("failed to obtain ssh connection: %s", err)
 		}
 		log.WithFields(log.Fields{"port": targetPort}).Trace("connecting")
-		conn, err := client.DialContext(ctx, "tcp4", fmt.Sprintf("%s:%d", "127.0.0.1", targetPort))
+		conn, err := client.DialContext(ctx, "tcp4", net.JoinHostPort("127.0.0.1", targetPort))
 		log.WithFields(log.Fields{"port": targetPort, "err": err}).Trace("done")
 		if err == nil {
 			return conn, nil
@@ -241,7 +245,7 @@ func (t *sshTransport) getSSHClient(host string) (*trackingSshClient, error) {
 		log.WithFields(log.Fields{"host": host}).Trace("using cached ssh connection")
 		return client, nil
 	}
-	sshAddr := fmt.Sprintf("%s:%d", host, t.port)
+	sshAddr := net.JoinHostPort(host, strconv.Itoa(t.port))
 	knownHostAlgos, err := t.getHostkeyAlgosFor(sshAddr)
 	if err != nil {
 		return nil, err
