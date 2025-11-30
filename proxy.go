@@ -167,7 +167,7 @@ func (pr *proxyRequest) sendRequest() error {
 }
 
 func parsableAsPrometheus(b []byte, contentType string) error {
-	parser, err := textparse.New(b, contentType, false, labels.NewSymbolTable())
+	parser, err := textparse.New(b, contentType, labels.NewSymbolTable(), textparse.ParserOptions{})
 	if err != nil {
 		return errors.New("failed to create parser for Prometheus metrics format")
 	}

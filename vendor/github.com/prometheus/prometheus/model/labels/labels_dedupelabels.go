@@ -20,7 +20,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"unsafe"
 
 	"github.com/cespare/xxhash/v2"
 )
@@ -56,7 +55,7 @@ func NewSymbolTable() *SymbolTable {
 		nameTable: &nameTable{byNum: make([]string, defaultSymbolTableSize)},
 		byName:    make(map[string]int, defaultSymbolTableSize),
 	}
-	t.nameTable.symbolTable = t
+	t.symbolTable = t
 	return t
 }
 
@@ -96,8 +95,8 @@ func (t *SymbolTable) toNumUnlocked(name string) int {
 func (t *SymbolTable) checkNum(name string) (int, bool) {
 	t.mx.Lock()
 	defer t.mx.Unlock()
-	i, bool := t.byName[name]
-	return i, bool
+	i, ok := t.byName[name]
+	return i, ok
 }
 
 // ToName maps an integer to a string.
@@ -105,46 +104,55 @@ func (t *nameTable) ToName(num int) string {
 	return t.byNum[num]
 }
 
+// "Varint" in this file is non-standard: we encode small numbers (up to 32767) in 2 bytes,
+// because we expect most Prometheus to have more than 127 unique strings.
+// And we don't encode numbers larger than 4 bytes because we don't expect more than 536,870,912 unique strings.
 func decodeVarint(data string, index int) (int, int) {
-	// Fast-path for common case of a single byte, value 0..127.
-	b := data[index]
+	b := int(data[index]) + int(data[index+1])<<8
+	index += 2
+	if b < 0x8000 {
+		return b, index
+	}
+	return decodeVarintRest(b, data, index)
+}
+
+func decodeVarintRest(b int, data string, index int) (int, int) {
+	value := b & 0x7FFF
+	b = int(data[index])
 	index++
 	if b < 0x80 {
-		return int(b), index
+		return value | (b << 15), index
 	}
-	value := int(b & 0x7F)
-	for shift := uint(7); ; shift += 7 {
-		// Just panic if we go of the end of data, since all Labels strings are constructed internally and
-		// malformed data indicates a bug, or memory corruption.
-		b := data[index]
-		index++
-		value |= int(b&0x7F) << shift
-		if b < 0x80 {
-			break
-		}
-	}
-	return value, index
+
+	value |= (b & 0x7f) << 15
+	b = int(data[index])
+	index++
+	return value | (b << 22), index
 }
 
 func decodeString(t *nameTable, data string, index int) (string, int) {
-	var num int
-	num, index = decodeVarint(data, index)
+	// Copy decodeVarint here, because the Go compiler says it's too big to inline.
+	num := int(data[index]) + int(data[index+1])<<8
+	index += 2
+	if num >= 0x8000 {
+		num, index = decodeVarintRest(num, data, index)
+	}
 	return t.ToName(num), index
 }
 
-// Bytes returns ls as a byte slice.
-// It uses non-printing characters and so should not be used for printing.
+// Bytes returns an opaque, not-human-readable, encoding of ls, usable as a map key.
+// Encoding may change over time or between runs of Prometheus.
 func (ls Labels) Bytes(buf []byte) []byte {
 	b := bytes.NewBuffer(buf[:0])
 	for i := 0; i < len(ls.data); {
 		if i > 0 {
-			b.WriteByte(seps[0])
+			b.WriteByte(sep)
 		}
 		var name, value string
 		name, i = decodeString(ls.syms, ls.data, i)
 		value, i = decodeString(ls.syms, ls.data, i)
 		b.WriteString(name)
-		b.WriteByte(seps[0])
+		b.WriteByte(sep)
 		b.WriteString(value)
 	}
 	return b.Bytes()
@@ -157,7 +165,7 @@ func (ls Labels) IsZero() bool {
 
 // MatchLabels returns a subset of Labels that matches/does not match with the provided label names based on the 'on' boolean.
 // If on is set to true, it returns the subset of labels that match with the provided label names and its inverse when 'on' is set to false.
-// TODO: This is only used in printing an error message
+// TODO: This is only used in printing an error message.
 func (ls Labels) MatchLabels(on bool, names ...string) Labels {
 	b := NewBuilder(ls)
 	if on {
@@ -193,9 +201,9 @@ func (ls Labels) Hash() uint64 {
 		}
 
 		b = append(b, name...)
-		b = append(b, seps[0])
+		b = append(b, sep)
 		b = append(b, value...)
-		b = append(b, seps[0])
+		b = append(b, sep)
 		pos = newPos
 	}
 	return xxhash.Sum64(b)
@@ -218,9 +226,9 @@ func (ls Labels) HashForLabels(b []byte, names ...string) (uint64, []byte) {
 		}
 		if name == names[j] {
 			b = append(b, name...)
-			b = append(b, seps[0])
+			b = append(b, sep)
 			b = append(b, value...)
-			b = append(b, seps[0])
+			b = append(b, sep)
 		}
 	}
 
@@ -244,9 +252,9 @@ func (ls Labels) HashWithoutLabels(b []byte, names ...string) (uint64, []byte) {
 			continue
 		}
 		b = append(b, name...)
-		b = append(b, seps[0])
+		b = append(b, sep)
 		b = append(b, value...)
-		b = append(b, seps[0])
+		b = append(b, sep)
 	}
 	return xxhash.Sum64(b), b
 }
@@ -267,10 +275,10 @@ func (ls Labels) BytesWithLabels(buf []byte, names ...string) []byte {
 		}
 		if lName == names[j] {
 			if b.Len() > 1 {
-				b.WriteByte(seps[0])
+				b.WriteByte(sep)
 			}
 			b.WriteString(lName)
-			b.WriteByte(seps[0])
+			b.WriteByte(sep)
 			b.WriteString(lValue)
 		}
 		pos = newPos
@@ -291,10 +299,10 @@ func (ls Labels) BytesWithoutLabels(buf []byte, names ...string) []byte {
 		}
 		if j == len(names) || lName != names[j] {
 			if b.Len() > 1 {
-				b.WriteByte(seps[0])
+				b.WriteByte(sep)
 			}
 			b.WriteString(lName)
-			b.WriteByte(seps[0])
+			b.WriteByte(sep)
 			b.WriteString(lValue)
 		}
 		pos = newPos
@@ -322,7 +330,12 @@ func (ls Labels) Get(name string) string {
 		} else if lName[0] > name[0] { // Stop looking if we've gone past.
 			break
 		}
-		_, i = decodeVarint(ls.data, i)
+		// Copy decodeVarint here, because the Go compiler says it's too big to inline.
+		num := int(ls.data[i]) + int(ls.data[i+1])<<8
+		i += 2
+		if num >= 0x8000 {
+			_, i = decodeVarintRest(num, ls.data, i)
+		}
 	}
 	return ""
 }
@@ -340,7 +353,12 @@ func (ls Labels) Has(name string) bool {
 		} else if lName[0] > name[0] { // Stop looking if we've gone past.
 			break
 		}
-		_, i = decodeVarint(ls.data, i)
+		// Copy decodeVarint here, because the Go compiler says it's too big to inline.
+		num := int(ls.data[i]) + int(ls.data[i+1])<<8
+		i += 2
+		if num >= 0x8000 {
+			_, i = decodeVarintRest(num, ls.data, i)
+		}
 	}
 	return false
 }
@@ -399,6 +417,13 @@ func (ls Labels) WithoutEmpty() Labels {
 	return ls
 }
 
+// ByteSize returns the approximate size of the labels in bytes.
+// String header size is ignored because it should be amortized to zero.
+// SymbolTable size is also not taken into account.
+func (ls Labels) ByteSize() uint64 {
+	return uint64(len(ls.data))
+}
+
 // Equal returns whether the two label sets are equal.
 func Equal(a, b Labels) bool {
 	if a.syms == b.syms {
@@ -424,10 +449,6 @@ func Equal(a, b Labels) bool {
 // EmptyLabels returns an empty Labels value, for convenience.
 func EmptyLabels() Labels {
 	return Labels{}
-}
-
-func yoloString(b []byte) string {
-	return *((*string)(unsafe.Pointer(&b)))
 }
 
 // New returns a sorted Labels from the given labels.
@@ -485,7 +506,7 @@ func Compare(a, b Labels) int {
 	return (la - ia) - (lb - ib)
 }
 
-// Copy labels from b on top of whatever was in ls previously, reusing memory or expanding if needed.
+// CopyFrom copies labels from b on top of whatever was in ls previously, reusing memory or expanding if needed.
 func (ls *Labels) CopyFrom(b Labels) {
 	*ls = b // Straightforward memberwise copy is all we need.
 }
@@ -531,29 +552,36 @@ func (ls Labels) Validate(f func(l Label) error) error {
 }
 
 // InternStrings calls intern on every string value inside ls, replacing them with what it returns.
-func (ls *Labels) InternStrings(intern func(string) string) {
+func (*Labels) InternStrings(func(string) string) {
 	// TODO: remove these calls as there is nothing to do.
 }
 
 // ReleaseStrings calls release on every string value inside ls.
-func (ls Labels) ReleaseStrings(release func(string)) {
+func (Labels) ReleaseStrings(func(string)) {
 	// TODO: remove these calls as there is nothing to do.
 }
 
-// DropMetricName returns Labels with "__name__" removed.
+// DropMetricName returns Labels with the "__name__" removed.
+// Deprecated: Use DropReserved instead.
 func (ls Labels) DropMetricName() Labels {
+	return ls.DropReserved(func(n string) bool { return n == MetricName })
+}
+
+// DropReserved returns Labels without the chosen (via shouldDropFn) reserved (starting with underscore) labels.
+func (ls Labels) DropReserved(shouldDropFn func(name string) bool) Labels {
 	for i := 0; i < len(ls.data); {
 		lName, i2 := decodeString(ls.syms, ls.data, i)
 		_, i2 = decodeVarint(ls.data, i2)
-		if lName == MetricName {
+		if lName[0] > '_' { // Stop looking if we've gone past special labels.
+			break
+		}
+		if shouldDropFn(lName) {
 			if i == 0 { // Make common case fast with no allocations.
 				ls.data = ls.data[i2:]
 			} else {
 				ls.data = ls.data[:i] + ls.data[i2:]
 			}
-			break
-		} else if lName[0] > MetricName[0] { // Stop looking if we've gone past.
-			break
+			continue
 		}
 		i = i2
 	}
@@ -646,29 +674,24 @@ func marshalNumbersToSizedBuffer(nums []int, data []byte) int {
 
 func sizeVarint(x uint64) (n int) {
 	// Most common case first
-	if x < 1<<7 {
-		return 1
+	if x < 1<<15 {
+		return 2
 	}
-	if x >= 1<<56 {
-		return 9
+	if x < 1<<22 {
+		return 3
 	}
-	if x >= 1<<28 {
-		x >>= 28
-		n = 4
+	if x >= 1<<29 {
+		panic("Number too large to represent")
 	}
-	if x >= 1<<14 {
-		x >>= 14
-		n += 2
-	}
-	if x >= 1<<7 {
-		n++
-	}
-	return n + 1
+	return 4
 }
 
 func encodeVarintSlow(data []byte, offset int, v uint64) int {
 	offset -= sizeVarint(v)
 	base := offset
+	data[offset] = uint8(v)
+	v >>= 8
+	offset++
 	for v >= 1<<7 {
 		data[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
@@ -678,11 +701,12 @@ func encodeVarintSlow(data []byte, offset int, v uint64) int {
 	return base
 }
 
-// Special code for the common case that a value is less than 128
+// Special code for the common case that a value is less than 32768.
 func encodeVarint(data []byte, offset, v int) int {
-	if v < 1<<7 {
-		offset--
+	if v < 1<<15 {
+		offset -= 2
 		data[offset] = uint8(v)
+		data[offset+1] = uint8(v >> 8)
 		return offset
 	}
 	return encodeVarintSlow(data, offset, uint64(v))
@@ -723,7 +747,7 @@ func appendLabelTo(nameNum, valueNum int, buf []byte) []byte {
 	}
 	i := sizeRequired
 	i = encodeVarint(buf, i, valueNum)
-	i = encodeVarint(buf, i, nameNum)
+	encodeVarint(buf, i, nameNum)
 	return buf
 }
 
@@ -762,7 +786,7 @@ func (b *ScratchBuilder) Add(name, value string) {
 	b.add = append(b.add, Label{Name: name, Value: value})
 }
 
-// Add a name/value pair, using []byte instead of string to reduce memory allocations.
+// UnsafeAddBytes adds a name/value pair, using []byte instead of string to reduce memory allocations.
 // The values must remain live until Labels() is called.
 func (b *ScratchBuilder) UnsafeAddBytes(name, value []byte) {
 	b.add = append(b.add, Label{Name: yoloString(name), Value: yoloString(value)})
@@ -791,7 +815,7 @@ func (b *ScratchBuilder) Labels() Labels {
 	return b.output
 }
 
-// Write the newly-built Labels out to ls, reusing an internal buffer.
+// Overwrite the newly-built Labels out to ls, reusing an internal buffer.
 // Callers must ensure that there are no other references to ls, or any strings fetched from it.
 func (b *ScratchBuilder) Overwrite(ls *Labels) {
 	var size int
@@ -804,4 +828,9 @@ func (b *ScratchBuilder) Overwrite(ls *Labels) {
 	marshalNumbersToSizedBuffer(b.nums, b.overwriteBuffer)
 	ls.syms = b.syms.nameTable
 	ls.data = yoloString(b.overwriteBuffer)
+}
+
+// SizeOfLabels returns the approximate space required for n copies of a label.
+func SizeOfLabels(name, value string, n uint64) uint64 {
+	return uint64(len(name)+len(value)) + n*4 // Assuming most symbol-table entries are 2 bytes long.
 }
