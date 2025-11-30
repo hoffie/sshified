@@ -1,3 +1,8 @@
+* v1.2.2
+  - Build with Go 1.25.4
+  - Update to Prometheus v3 packages
+  - Update dependencies
+
 * v1.2.1
   - Add gzip support in --response.reject-non-prometheus
 
