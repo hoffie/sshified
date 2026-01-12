@@ -1,13 +1,11 @@
 module github.com/hoffie/sshified
 
-go 1.24.0
-
-toolchain go1.24.1
+go 1.24.9
 
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/prometheus/client_golang v1.23.2
-	github.com/prometheus/prometheus v0.308.1
+	github.com/prometheus/prometheus v0.309.1
 	github.com/sirupsen/logrus v1.9.3
 	golang.org/x/crypto v0.46.0
 )
@@ -27,5 +25,5 @@ require (
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
-	google.golang.org/protobuf v1.36.10 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 )
