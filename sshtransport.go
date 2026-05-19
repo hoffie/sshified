@@ -171,8 +171,7 @@ func (t *sshTransport) dialContext(ctx context.Context, network, addr string) (n
 		metricErrorsByType.WithLabelValues("address_parsing").Inc()
 		return nil, errors.New("failed to parse address")
 	}
-	retry := true
-	for retry {
+	for attempt := 1; attempt <= 2; attempt++ {
 		client, err := t.getSSHClient(targetHost)
 		if err != nil {
 			metricErrorsByType.WithLabelValues("ssh_connection").Inc()
@@ -202,15 +201,13 @@ func (t *sshTransport) dialContext(ctx context.Context, network, addr string) (n
 			keepAliveErr = fmt.Errorf("failed to receive keepalive within %d seconds, reconnecting", *timeout)
 			metricErrorsByType.WithLabelValues("ssh_keepalive_timeout").Inc()
 		}
-		log.WithFields(log.Fields{"host": targetHost, "err": keepAliveErr}).Debug("keepalive failed, reconnecting")
+		log.WithFields(log.Fields{"host": targetHost, "err": keepAliveErr, "attempt": attempt}).Debug("keepalive failed")
 		t.sshClientPool.delete(targetHost)
 		// Don't close right away, there might still be inflight
 		// requests which would otherwise crash as they reference
 		// invalid memory:
 		_ = client.CloseWhenFinished()
 		metricSSHKeepaliveFailuresTotal.Inc()
-		retry = false
-		continue
 	}
 	return nil, err
 }

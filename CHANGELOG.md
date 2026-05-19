@@ -1,5 +1,6 @@
 * v1.2.3
   - Update dependencies
+  - Bugfix: When a cached SSH connection is found to be dead, re-try immediately
 
 * v1.2.2
   - Build with Go 1.25.4
