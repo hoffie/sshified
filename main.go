@@ -64,7 +64,7 @@ func main() {
 	signal.Notify(c, syscall.SIGHUP)
 
 	go func() {
-		for _ = range c {
+		for range c {
 			log.Info("got SIGHUP, reloading known hosts and key file")
 			err := sshTransport.LoadFiles()
 			if err == nil {

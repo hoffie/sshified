@@ -29,7 +29,7 @@ var (
 			Help: "Number of cached ssh connections",
 		},
 	)
-	metricSshKeepaliveFailuresTotal = prometheus.NewCounter(
+	metricSSHKeepaliveFailuresTotal = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Name: "sshified_ssh_keepalive_failures_total",
 			Help: "Total of all SSH keepalive failures (aborts, reconnects)",
@@ -59,7 +59,7 @@ var (
 func init() {
 	prometheus.MustRegister(metricPayloadBytes)
 	prometheus.MustRegister(metricSshclientPool)
-	prometheus.MustRegister(metricSshKeepaliveFailuresTotal)
+	prometheus.MustRegister(metricSSHKeepaliveFailuresTotal)
 	prometheus.MustRegister(metricRequestDuration)
 	prometheus.MustRegister(metricRequestsTotal)
 	prometheus.MustRegister(metricRequestsFailedTotal)

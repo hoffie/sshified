@@ -184,9 +184,9 @@ func parsableAsPrometheus(b []byte, contentType string) error {
 }
 
 func (pr *proxyRequest) forwardResponse() error {
-	assumeHttpErr := true
+	assumeHTTPErr := true
 	defer func() {
-		if assumeHttpErr {
+		if assumeHTTPErr {
 			pr.rw.WriteHeader(http.StatusInternalServerError)
 		}
 	}()
@@ -214,7 +214,7 @@ func (pr *proxyRequest) forwardResponse() error {
 				if err != nil {
 					return fmt.Errorf("failed to create gzip reader: %v", err)
 				}
-				defer gzipReader.Close()
+				defer func() { _ = gzipReader.Close() }()
 				gzipLimitReader := io.LimitReader(gzipReader, *responseMaxBytes)
 				decBytes, err = io.ReadAll(gzipLimitReader)
 				if err != nil {
@@ -226,7 +226,7 @@ func (pr *proxyRequest) forwardResponse() error {
 			}
 			err := parsableAsPrometheus(decBytes, upstreamRespHeader.Get("Content-Type"))
 			if err != nil {
-				assumeHttpErr = false
+				assumeHTTPErr = false
 				pr.rw.WriteHeader(http.StatusBadGateway)
 				return err
 			}
@@ -242,7 +242,7 @@ func (pr *proxyRequest) forwardResponse() error {
 			respHeader.Add(k, v)
 		}
 	}
-	assumeHttpErr = false
+	assumeHTTPErr = false
 	pr.rw.WriteHeader(pr.upstreamResponse.StatusCode)
 	log.Trace("copying response body")
 	length, err := io.Copy(pr.rw, reader)
