@@ -1,3 +1,6 @@
+* v1.2.3
+  - Update dependencies
+
 * v1.2.2
   - Build with Go 1.25.4
   - Update to Prometheus v3 packages
