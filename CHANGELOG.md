@@ -2,6 +2,7 @@
   - Update dependencies
   - Bugfix: When a cached SSH connection is found to be dead, re-try immediately
   - Bugfix: When a cached SSH connection fails, return the proper error instead of nil
+  - Bugfix: Metric sshified_sshclient_pool_total tracking was off and could have become negative
 
 * v1.2.2
   - Build with Go 1.25.4

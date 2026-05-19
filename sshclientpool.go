@@ -21,8 +21,11 @@ func newSSHClientPool() *sshClientPool {
 
 func (p *sshClientPool) delete(host string) {
 	p.lock.Lock()
-	delete(p.pool, host)
-	metricSshclientPool.Dec()
+	_, cached := p.pool[host]
+	if cached {
+		delete(p.pool, host)
+		metricSshclientPool.Dec()
+	}
 	p.lock.Unlock()
 }
 
