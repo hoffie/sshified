@@ -166,11 +166,12 @@ func (t *sshTransport) dialContext(ctx context.Context, network, addr string) (n
 	if t.nextProxyAddr != "" {
 		addr = t.nextProxyAddr
 	}
-	targetHost, targetPort, err := net.SplitHostPort(addr)
-	if err != nil {
+	targetHost, targetPort, splitErr := net.SplitHostPort(addr)
+	if splitErr != nil {
 		metricErrorsByType.WithLabelValues("address_parsing").Inc()
 		return nil, errors.New("failed to parse address")
 	}
+	var err error
 	for attempt := 1; attempt <= 2; attempt++ {
 		client, err := t.getSSHClient(targetHost)
 		if err != nil {
