@@ -1,4 +1,5 @@
 * v1.2.3
+  - Bugfix: When a cached SSH connection hangs, be sure that we handle the hang with a check/reconnect before our connect deadline expires.
   - Bugfix: When a cached SSH connection is found to be dead, re-try immediately
   - Bugfix: When a cached SSH connection fails, return the proper error instead of nil
   - Bugfix: Metric sshified_sshclient_pool_total tracking was off and could have become negative

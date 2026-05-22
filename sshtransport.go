@@ -171,6 +171,7 @@ func (t *sshTransport) dialContext(ctx context.Context, network, addr string) (n
 		metricErrorsByType.WithLabelValues("address_parsing").Inc()
 		return nil, errors.New("failed to parse address")
 	}
+	stepTimeout := timeoutDurationSeconds / 4
 	var err error
 	for attempt := 1; attempt <= 2; attempt++ {
 		client, err := t.getSSHClient(targetHost)
@@ -179,7 +180,11 @@ func (t *sshTransport) dialContext(ctx context.Context, network, addr string) (n
 			return nil, fmt.Errorf("failed to obtain ssh connection: %s", err)
 		}
 		log.WithFields(log.Fields{"port": targetPort}).Trace("connecting")
-		conn, err := client.DialContext(ctx, "tcp4", net.JoinHostPort("127.0.0.1", targetPort))
+		// it's important to choose a smaller timeout here than our caller.
+		// otherwise, we might never get a chance to mark the connection as dead,
+		// run the keepalive check and force a reconnect:
+		dialCtx, _ := context.WithTimeout(ctx, stepTimeout)
+		conn, err := client.DialContext(dialCtx, "tcp4", net.JoinHostPort("127.0.0.1", targetPort))
 		log.WithFields(log.Fields{"port": targetPort, "err": err}).Trace("done")
 		if err == nil {
 			return conn, nil
@@ -198,8 +203,8 @@ func (t *sshTransport) dialContext(ctx context.Context, network, addr string) (n
 				return nil, err
 			}
 			metricErrorsByType.WithLabelValues("ssh_keepalive_failure").Inc()
-		case <-time.After(timeoutDurationSeconds / 2):
-			keepAliveErr = fmt.Errorf("failed to receive keepalive within %d seconds, reconnecting", *timeout)
+		case <-time.After(stepTimeout):
+			keepAliveErr = fmt.Errorf("failed to receive keepalive within %d seconds, reconnecting", stepTimeout / time.Second)
 			metricErrorsByType.WithLabelValues("ssh_keepalive_timeout").Inc()
 		}
 		log.WithFields(log.Fields{"host": targetHost, "err": keepAliveErr, "attempt": attempt}).Debug("keepalive failed")
