@@ -1,3 +1,6 @@
+* v1.2.4
+  - Bugfix: Stop spending the total timeout budget in SSH connection handling.
+
 * v1.2.3
   - Bugfix: When a cached SSH connection hangs, be sure that we handle the hang with a check/reconnect before our connect deadline expires.
   - Bugfix: When a cached SSH connection is found to be dead, re-try immediately

@@ -256,7 +256,7 @@ func (t *sshTransport) getSSHClient(host string) (*trackingSSHClient, error) {
 		Auth:              t.auth,
 		HostKeyCallback:   t.knownHostsCallback,
 		HostKeyAlgorithms: upgradedHostKeyAlgos,
-		Timeout:           timeoutDurationSeconds,
+		Timeout:           stepTimeoutDurationSeconds,
 	}
 	// TODO: This should use DialContext once this PR is merged:
 	// https://github.com/golang/go/issues/64686
