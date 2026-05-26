@@ -1,4 +1,5 @@
 * v1.2.4
+  - Bugfix: Fix goroutine leak in keepalive handling which could cause high CPU load after some time
   - Bugfix: Stop spending the total timeout budget in SSH connection handling.
 
 * v1.2.3

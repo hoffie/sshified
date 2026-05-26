@@ -189,10 +189,15 @@ func (t *sshTransport) dialContext(ctx context.Context, network, addr string) (n
 			return conn, nil
 		}
 		log.WithFields(log.Fields{"host": targetHost, "err": err}).Debug("connection failed, sending keepalive")
-		errChan := make(chan error)
+		// use a buffered channel for error transmission here.
+		// if we hit the timeout in the select below, we have to ensure
+		// that the go routine can complete at some point, even if
+		// there is no channel reader anymore.
+		errChan := make(chan error, 1)
 		go func() {
 			_, _, err := client.SendRequest("keepalive@openssh.com", true, nil)
 			errChan <- err
+			close(errChan)
 		}()
 		var keepAliveErr error
 		select {
