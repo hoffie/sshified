@@ -23,6 +23,7 @@ var (
 	sshPort                     = kingpin.Flag("ssh.port", "port used for connecting via ssh").Default("22").Int()
 	timeout                     = kingpin.Flag("timeout", "full roundtrip request timeout in seconds").Default("50").Int()
 	timeoutDurationSeconds      time.Duration
+	stepTimeoutDurationSeconds  time.Duration
 	responseMaxBytes            = kingpin.Flag("response.max-bytes", "maximum length of upstream response in bytes (0 = no limit)").Default("0").Int64()
 	responseRejectNonPrometheus = kingpin.Flag("response.reject-non-prometheus", "parse upstream response as Prometheus metrics and reject unparsable responses").Bool()
 )
@@ -30,6 +31,7 @@ var (
 func main() {
 	kingpin.Parse()
 	timeoutDurationSeconds = time.Duration(*timeout) * time.Second
+	stepTimeoutDurationSeconds = timeoutDurationSeconds / 4
 	if *trace {
 		log.SetLevel(log.TraceLevel)
 	} else if *verbose {
