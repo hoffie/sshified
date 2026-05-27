@@ -3,6 +3,7 @@
   - Bugfix: Fix missing context cleanup for in-ssh connection attempts (resource leak)
   - Bugfix: Avoid pointless reconnects if the context was cancelled already
   - Bugfix: Fix incorrect error propagation in retry logic
+  - Bugfix: Simplify retry control flow
   - Logging: Output timestamps in CLI logs
 
 * v1.2.4

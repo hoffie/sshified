@@ -295,21 +295,23 @@ func (t *sshTransport) getSSHClient(host string) (*trackingSSHClient, error) {
 	// TODO: This should use DialContext once this PR is merged:
 	// https://github.com/golang/go/issues/64686
 	plainClient, err := ssh.Dial("tcp", sshAddr, clientConfig)
-	client = &trackingSSHClient{Client: plainClient}
-	if err == nil {
-		log.WithFields(log.Fields{"host": host}).Trace("caching successful ssh connection")
-		cachedClient, cached := t.sshClientPool.setOrGetCached(host, client)
-		if cached {
-			// we already checked above and did not have a cached client.
-			// however, due to concurrent requests, we may now have one.
-			// apparently this is the case here.
-			// therefore, we drop our newly created client and use the cached one
-			// instead.
-			_ = client.Close()
-			client = cachedClient
-		}
+	if err != nil {
+		log.WithFields(log.Fields{"err": err}).Trace("connection failed")
+		return nil, err
 	}
-	return client, err
+	log.WithFields(log.Fields{"host": host}).Trace("caching successful ssh connection")
+	client = &trackingSSHClient{Client: plainClient}
+	cachedClient, cached := t.sshClientPool.setOrGetCached(host, client)
+	if cached {
+		// we already checked above and did not have a cached client.
+		// however, due to concurrent requests, we may now have one.
+		// apparently this is the case here.
+		// therefore, we drop our newly created client and use the cached one
+		// instead.
+		_ = client.Close()
+		client = cachedClient
+	}
+	return client, nil
 }
 
 // When reading known_host files we find key types such as ssh-rsa.
