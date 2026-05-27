@@ -208,6 +208,12 @@ func (t *sshTransport) dialContext(ctx context.Context, network, addr string) (n
 			return conn, nil
 		}
 		log.WithFields(log.Fields{"host": targetHost, "err": err}).Debug("connection failed, sending keepalive")
+		// ensure that the request is still valid at all:
+		select {
+		case <-ctx.Done():
+			return nil, context.Cause(ctx)
+		default:
+		}
 		// use a buffered channel for error transmission here.
 		// if we hit the timeout in the select below, we have to ensure
 		// that the go routine can complete at some point, even if
@@ -220,6 +226,8 @@ func (t *sshTransport) dialContext(ctx context.Context, network, addr string) (n
 		}()
 		var keepAliveErr error
 		select {
+		case <-ctx.Done():
+			return nil, context.Cause(ctx)
 		case keepAliveErr = <-errChan:
 			if keepAliveErr == nil {
 				log.WithFields(log.Fields{"host": targetHost}).Debug("keepalive worked, this is not an ssh conn problem")
