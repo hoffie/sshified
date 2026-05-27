@@ -87,6 +87,24 @@ func (c *trackingSSHClient) DialContext(ctx context.Context, n, addr string) (ne
 	return tc, err
 }
 
+func (c *trackingSSHClient) SendRequest(name string, wantReply bool, payload []byte) (bool, []byte, error) {
+	// ssh.Client.SendRequest() will cause an infinite loop in its drain logic
+	// when it is called on an already closed client.
+	// While there may also be internal close calls, the most relevant origin
+	// is our code.
+	// Therefore, capture our lock, ensure that
+	// we haven't called Close() yet and hold the lock
+	// until the keepalive returns to avoid racing with parallel
+	// KeepAlive calls:
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	if c.shouldClose {
+		log.Trace("trackingSSHClient: rejecting SendRequest during client shutdown")
+		return false, nil, errors.New("trackingSSHClient is shutting down")
+	}
+	return c.Client.SendRequest(name, wantReply, payload)
+}
+
 func (c *trackingSSHClient) connCloseCallback() {
 	c.mtx.Lock()
 	c.inflightConns--
