@@ -191,7 +191,9 @@ func (t *sshTransport) dialContext(ctx context.Context, network, addr string) (n
 	}
 	var err error
 	for attempt := 1; attempt <= 2; attempt++ {
-		client, err := t.getSSHClient(targetHost)
+		var client *trackingSSHClient
+		// ensure that err is assigned properly, no := here:
+		client, err = t.getSSHClient(targetHost)
 		if err != nil {
 			metricErrorsByType.WithLabelValues("ssh_connection").Inc()
 			return nil, fmt.Errorf("failed to obtain ssh connection: %s", err)
