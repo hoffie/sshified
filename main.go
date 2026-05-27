@@ -39,6 +39,9 @@ func main() {
 	} else {
 		log.SetLevel(log.InfoLevel)
 	}
+	log.SetFormatter(&log.TextFormatter{
+		FullTimestamp: true,
+	})
 	if *responseMaxBytes <= 0 && *responseRejectNonPrometheus {
 		kingpin.Fatalf("setting --response.reject-non-prometheus also requires setting a --response.max-bytes value due to internal buffering needs")
 	}

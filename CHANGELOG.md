@@ -2,6 +2,7 @@
   - Bugfix: Fix infinite loop (permanent high CPU) by working around a crypto/ssh.mux.SendRequest() issue when called after closing the client.
   - Bugfix: Fix missing context cleanup for in-ssh connection attempts (resource leak)
   - Bugfix: Avoid pointless reconnects if the context was cancelled already
+  - Logging: Output timestamps in CLI logs
 
 * v1.2.4
   - Bugfix: Fix goroutine leak in keepalive handling which could cause high CPU load after some time
