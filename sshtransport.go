@@ -182,8 +182,9 @@ func (t *sshTransport) dialContext(ctx context.Context, network, addr string) (n
 		// it's important to choose a smaller timeout here than our caller.
 		// otherwise, we might never get a chance to mark the connection as dead,
 		// run the keepalive check and force a reconnect:
-		dialCtx, _ := context.WithTimeout(ctx, stepTimeoutDurationSeconds)
+		dialCtx, dialCancel := context.WithTimeout(ctx, stepTimeoutDurationSeconds)
 		conn, err := client.DialContext(dialCtx, "tcp4", net.JoinHostPort("127.0.0.1", targetPort))
+		dialCancel()
 		log.WithFields(log.Fields{"port": targetPort, "err": err}).Trace("done")
 		if err == nil {
 			return conn, nil
