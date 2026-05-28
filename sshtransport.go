@@ -55,6 +55,7 @@ type sshTransport struct {
 // channel.
 type trackingSSHClient struct {
 	*ssh.Client
+	Conn               net.Conn
 	mtx                sync.Mutex
 	inflightConns      int64
 	shouldClose        bool
@@ -332,15 +333,20 @@ func (t *sshTransport) getSSHClient(host string) (*trackingSSHClient, error) {
 		HostKeyAlgorithms: upgradedHostKeyAlgos,
 		Timeout:           stepTimeoutDurationSeconds,
 	}
-	// TODO: This should use DialContext once this PR is merged:
-	// https://github.com/golang/go/issues/64686
-	plainClient, err := ssh.Dial("tcp", sshAddr, clientConfig)
+	conn, err := net.DialTimeout("tcp", sshAddr, clientConfig.Timeout)
 	if err != nil {
-		log.WithFields(log.Fields{"err": err}).Trace("connection failed")
+		log.WithFields(log.Fields{"host": host, "err": err}).Trace("TCP connection failed")
 		return nil, err
 	}
+	c, chans, reqs, err := ssh.NewClientConn(conn, sshAddr, clientConfig)
+	if err != nil {
+		log.WithFields(log.Fields{"host": host, "err": err}).Trace("SSH connection failed")
+		return nil, err
+	}
+	plainClient := ssh.NewClient(c, chans, reqs)
+
 	log.WithFields(log.Fields{"host": host}).Trace("caching successful ssh connection")
-	client = &trackingSSHClient{Client: plainClient}
+	client = &trackingSSHClient{Client: plainClient, Conn: conn}
 	cachedClient, cached := t.sshClientPool.setOrGetCached(host, client)
 	if cached {
 		// we already checked above and did not have a cached client.
