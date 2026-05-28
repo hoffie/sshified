@@ -55,9 +55,14 @@ type sshTransport struct {
 // channel.
 type trackingSSHClient struct {
 	*ssh.Client
-	mtx           sync.Mutex
-	inflightConns int64
-	shouldClose   bool
+	mtx                sync.Mutex
+	inflightConns      int64
+	shouldClose        bool
+	keepaliveMtx       sync.Mutex
+	keepaliveInflight  bool
+	keepaliveWaitChan  chan struct{}
+	keepaliveStartTime time.Time
+	keepaliveErr       error
 }
 
 // trackingSSHConn is a wrapper for net.Conn, which is used by
@@ -96,13 +101,66 @@ func (c *trackingSSHClient) SendRequest(name string, wantReply bool, payload []b
 	// we haven't called Close() yet and hold the lock
 	// until the keepalive returns to avoid racing with parallel
 	// KeepAlive calls:
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
 	if c.shouldClose {
 		log.Trace("trackingSSHClient: rejecting SendRequest during client shutdown")
 		return false, nil, errors.New("trackingSSHClient is shutting down")
 	}
+	c.mtx.Lock()
+	c.inflightConns++
+	c.mtx.Unlock()
+	// check again, the locking might have taken some time
+	if c.shouldClose {
+		log.Trace("trackingSSHClient: rejecting SendRequest during client shutdown")
+		return false, nil, errors.New("trackingSSHClient is shutting down")
+	}
+	defer func() {
+		c.mtx.Lock()
+		c.inflightConns--
+		c.mtx.Unlock()
+	}()
 	return c.Client.SendRequest(name, wantReply, payload)
+}
+
+func (c *trackingSSHClient) CheckKeepalive(ctx context.Context) error {
+	ctx, ctxCancel := context.WithTimeout(ctx, stepTimeoutDurationSeconds)
+	defer ctxCancel()
+	c.keepaliveMtx.Lock()
+	// we only want one keepalive request inflight; if the previous one did
+	// not return yet, this is still relevant for us (connection
+	// probably dead)
+	if !c.keepaliveInflight {
+		c.keepaliveInflight = true
+		c.keepaliveWaitChan = make(chan struct{})
+		c.keepaliveStartTime = time.Now()
+		log.Trace("starting new keepalive goroutine")
+		go c.awaitKeepalive()
+	}
+	c.keepaliveMtx.Unlock()
+	if time.Since(c.keepaliveStartTime) > stepTimeoutDurationSeconds {
+		log.Trace("previous inflight keepalive already timed out, failing early")
+		return errors.New("previous keepalive already timed out")
+	}
+	log.Trace("waiting for keepalive result")
+	select {
+	case <-c.keepaliveWaitChan:
+		return c.keepaliveErr
+	case <-ctx.Done():
+		// SendRequest will not have terminated by now and might be
+		// waiting for a long time.
+		// Sadly, we don't know a reliable and safe way to stop it
+		// and will have to live with them being only drained much
+		// later.
+		return context.Cause(ctx)
+	}
+}
+
+func (c *trackingSSHClient) awaitKeepalive() {
+	log.Trace("awaitKeepalive: SendRequest() start")
+	_, _, err := c.SendRequest("keepalive@openssh.com", true, nil)
+	log.WithFields(log.Fields{"err": err}).Trace("awaitKeepalive: SendRequest() returned")
+	c.keepaliveErr = err
+	c.keepaliveInflight = false
+	close(c.keepaliveWaitChan)
 }
 
 func (c *trackingSSHClient) connCloseCallback() {
@@ -216,31 +274,13 @@ func (t *sshTransport) dialContext(ctx context.Context, network, addr string) (n
 			return nil, context.Cause(ctx)
 		default:
 		}
-		// use a buffered channel for error transmission here.
-		// if we hit the timeout in the select below, we have to ensure
-		// that the go routine can complete at some point, even if
-		// there is no channel reader anymore.
-		errChan := make(chan error, 1)
-		go func() {
-			_, _, err := client.SendRequest("keepalive@openssh.com", true, nil)
-			errChan <- err
-			close(errChan)
-		}()
-		var keepAliveErr error
-		select {
-		case <-ctx.Done():
-			return nil, context.Cause(ctx)
-		case keepAliveErr = <-errChan:
-			if keepAliveErr == nil {
-				log.WithFields(log.Fields{"host": targetHost}).Debug("keepalive worked, this is not an ssh conn problem")
-				return nil, err
-			}
-			metricErrorsByType.WithLabelValues("ssh_keepalive_failure").Inc()
-		case <-time.After(stepTimeoutDurationSeconds):
-			keepAliveErr = fmt.Errorf("failed to receive keepalive within %d seconds, reconnecting", stepTimeoutDurationSeconds / time.Second)
-			metricErrorsByType.WithLabelValues("ssh_keepalive_timeout").Inc()
+		keepaliveErr := client.CheckKeepalive(ctx)
+		if keepaliveErr == nil {
+			log.WithFields(log.Fields{"host": targetHost}).Debug("keepalive worked, this is not an ssh conn problem")
+			return nil, err
 		}
-		log.WithFields(log.Fields{"host": targetHost, "err": keepAliveErr, "attempt": attempt}).Debug("keepalive failed")
+		metricErrorsByType.WithLabelValues("ssh_keepalive_failure").Inc()
+		log.WithFields(log.Fields{"host": targetHost, "err": err, "attempt": attempt}).Debug("keepalive failed")
 		t.sshClientPool.delete(targetHost)
 		// Don't close right away, there might still be inflight
 		// requests which would otherwise crash as they reference
