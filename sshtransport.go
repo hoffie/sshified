@@ -157,6 +157,8 @@ func (c *trackingSSHClient) CheckKeepalive(ctx context.Context) error {
 
 func (c *trackingSSHClient) awaitKeepalive() {
 	log.Trace("awaitKeepalive: SendRequest() start")
+	c.Conn.SetDeadline(time.Now().Add(stepTimeoutDurationSeconds))
+	defer c.Conn.SetDeadline(time.Time{})
 	_, _, err := c.SendRequest("keepalive@openssh.com", true, nil)
 	log.WithFields(log.Fields{"err": err}).Trace("awaitKeepalive: SendRequest() returned")
 	c.keepaliveErr = err
