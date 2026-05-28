@@ -19,11 +19,17 @@ cleanup:
 	sudo userdel $(USER) || true
 
 
-run-webserver:
-	go run server.go
+run-webserver1:
+	go run server.go 8080
+
+run-webserver2:
+	go run server.go 8081
 
 run-sshified:
-	../sshified --proxy.listen-addr 127.0.0.1:8888 --ssh.user $(USER) --ssh.key-file conf/id_rsa --ssh.known-hosts-file conf/known_hosts
+	../sshified --proxy.listen-addr 127.0.0.1:8888 --ssh.user $(USER) --ssh.key-file conf/id_rsa --ssh.known-hosts-file conf/known_hosts --metrics.listen-addr=127.0.0.1:9000
+
+run-sshified-debug:
+	../sshified --proxy.listen-addr 127.0.0.1:8888 --ssh.user $(USER) --ssh.key-file conf/id_rsa --ssh.known-hosts-file conf/known_hosts --trace --metrics.listen-addr=127.0.0.1:9000 --timeout 5
 
 run-loadtest:
 	curl --fail-with-body -x 127.0.0.1:8888 http://localhost:8080/bar -v
