@@ -1,3 +1,6 @@
+* v1.2.6
+  - Update dependencies (Prometheus 3.12.0)
+
 * v1.2.5
   - Bugfix: Fix infinite loop (permanent high CPU) by working around a crypto/ssh.mux.SendRequest() issue when called after closing the client.
   - Bugfix: Fix missing context cleanup for in-ssh connection attempts (resource leak)
