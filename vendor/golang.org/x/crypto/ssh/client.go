@@ -281,3 +281,7 @@ func BannerDisplayStderr() BannerCallback {
 		return err
 	}
 }
+
+// This is just a compile time guard to ensure that our local fixes for
+// mux.SendRequest not overwritten when updating dependencies:
+func RequireSendRequestHangFix() { }

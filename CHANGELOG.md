@@ -1,4 +1,5 @@
 * v1.2.6
+  - Bugfix: Fix the long-standing infinite loop bug in the vendored golang.org/x/crypto/ssh/mux.SendRequest method
   - Update dependencies (Prometheus 3.12.0)
 
 * v1.2.5
