@@ -18,14 +18,6 @@ import (
 	"golang.org/x/crypto/ssh/knownhosts"
 )
 
-func init() {
-	// The vendored golang.org/x/crypto/ssh is currently modified
-	// to fix a hang issue in mux.SendRequest(), which is critical to us.
-	// This dummy function call is just a compile time check to ensure
-	// that we are still operating on the local fork:
-	ssh.RequireSendRequestHangFix()
-}
-
 func makePubkeyAuth(keyFile string) ([]ssh.AuthMethod, error) {
 	key, err := os.ReadFile(keyFile)
 	if err != nil {

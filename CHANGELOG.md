@@ -1,5 +1,8 @@
 * v1.2.7
   - Update dependencies
+  - Drop go/x/crypto local fix as the issue has been fixed upstream
+    https://github.com/golang/crypto/commit/4c4d20b72c2ffcc65325634d57021774dd2a1750
+    https://go-review.googlesource.com/c/crypto/+/783681
 
 * v1.2.6
   - Bugfix: Fix the long-standing infinite loop bug in the vendored golang.org/x/crypto/ssh/mux.SendRequest method
