@@ -1,3 +1,6 @@
+* v1.2.8
+  - Update dependencies (including another crypto/ssh stability fix)
+
 * v1.2.7
   - Update dependencies
   - Drop go/x/crypto local fix as the issue has been fixed upstream
