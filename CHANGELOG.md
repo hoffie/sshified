@@ -1,3 +1,5 @@
+* v1.2.9
+  - Update dependencies
 * v1.2.8
   - Update dependencies (including another crypto/ssh stability fix)
   - Build with go 1.27
